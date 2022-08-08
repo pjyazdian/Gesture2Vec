@@ -4,7 +4,7 @@ This is an official PyTorch implementation of *Gesture2Vec: Clustering Gestures 
 
 ### [PAPER]() | [VIDEO](https://www.youtube.com/watch?v=ac8jWk4fdCU)
 
-![OVERVIEW](.github/model.pdf)
+![OVERVIEW](Figures/model.pdf)
 
 ### We will provide our code in the near future.
 
