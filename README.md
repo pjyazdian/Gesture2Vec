@@ -10,7 +10,8 @@ This is an official PyTorch implementation of *Gesture2Vec: Clustering Gestures 
 
 
 
-<video src='https://www.youtube.com/watch?v=ac8jWk4fdCU' width=180/>
+[![IMAGE ALT TEXT HERE](https://img.youtube.com/vi/ac8jWk4fdCU/0.jpg)](https://www.youtube.com/watch?v=ac8jWk4fdCU)
+
 
 
 ### The code is coming soon. Stay tuned!
