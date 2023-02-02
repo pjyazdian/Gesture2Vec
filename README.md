@@ -22,6 +22,9 @@ This is an official PyTorch implementation of *Gesture2Vec: Clustering Gestures 
 
 ### The code instrauction is coming soon. Stay tuned!
 
+## License
+This code is distributed under an [MIT LICENSE](LICENSE).
 
+Note that our code uses datasets inluding Trinity and Talk With Hand (TWH) that each have their own respective licenses that must also be followed.
 
 Please feel free to contact us (pjomeyaz@sfu.ca) with any question or concerns.
