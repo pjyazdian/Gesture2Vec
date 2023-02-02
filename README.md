@@ -20,7 +20,7 @@ This is an official PyTorch implementation of *Gesture2Vec: Clustering Gestures 
 
 
 
-### The code is coming soon. Stay tuned!
+### The code instrauction is coming soon. Stay tuned!
 
 
 
