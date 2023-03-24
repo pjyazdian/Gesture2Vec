@@ -10,6 +10,12 @@ matplotlib==3.7.1
 seaborn==0.12.2
 openTSNE==0.7.1
 tqdm==4.65.0
+
+git+https://github.com/madrury/basis-expansions.git@main#egg=basis_expansions
+csaps==1.1.0
+tslearn==0.5.3.2
+openai==0.27.2
+
 # If you have a NVIDIA GPU capable of using CUDA, no changes are required. Otherwise change commented line to CPU.
 --extra-index-url https://download.pytorch.org/whl/cu117
 # --extra-index-url https://download.pytorch.org/whl/cpu
