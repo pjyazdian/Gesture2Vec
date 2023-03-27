@@ -1,3 +1,23 @@
+"""Utility file to build a a language vector representation model.
+
+Language vector representations are built from existing FastText resources.
+These resource files (ex. crawl-300d-2M-subword.bin) must be saved to a directory.
+The directory must be included in the config files.
+Training and Testing datasets (as PyTorch dataset subclasses) must also be provided.
+If a cache file is valid, then the word_vec_path and feat_dim args can be ignored.
+
+Typical usage example:
+    v = build_vocab(
+        'first_vocab',
+        [training, testing],
+        'dataset/vocab_cache.pkl',
+        'resource/crawl-300d-2M-subword.bin',
+        300
+    )
+    index_words(v, 'dataset/lmdb/data.mdb')
+"""
+
+
 import logging
 import os
 import pickle
@@ -85,7 +105,3 @@ def index_words(lang_model: Vocab, lmdb_dir: str) -> None:
 
     lmdb_env.close()
     logging.info("    indexed %d words" % lang_model.n_words)
-
-    # filtering vocab
-    # MIN_COUNT = 3
-    # lang_model.trim(MIN_COUNT)
