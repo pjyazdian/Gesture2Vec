@@ -1,3 +1,10 @@
+"""Utility file to read JSON files containing subtitles into an object.
+
+Typical usage example:
+    s = SubtitleWrapper('dataset/subtitles.json')
+    words = s.get()
+"""
+
 import json
 import re
 
@@ -27,18 +34,25 @@ def normalize_string(s: str) -> str:
 
 
 class SubtitleWrapper:
-    """Contains the subtitles for an audio file.
+    """Contains the subtitles converted from a JSON file.
 
     Subtitles are expected to be contained in a JSON file with the format:
     {
         'alternative':
             []: # only the first element contains the following:
                 {
-                    'words': [],
+                    'words': [
+                        {
+                            'start_time': '0.100s',
+                            'end_time': '0.500s',
+                            'word': 'really'
+                        },
+                        { <contains more of these structured elements> }
+                    ],
                     <other data>
                 }
     }
-    where each element of 'words' contains a word and start and end times of the subtitle.
+    Note: JSON uses double-quotes instead of single-quotes. Single quotes are used for doc-string reasons.
 
     Attributes:
         subtitle: A list of strings containing all the subtitles in order.
