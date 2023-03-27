@@ -5,6 +5,7 @@ Typical usage example:
     l.update(2.33)
 """
 
+
 class AverageMeter(object):
     """Computes and stores the average and current value (such as loss values).
 
