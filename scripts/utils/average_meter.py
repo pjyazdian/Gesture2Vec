@@ -1,3 +1,10 @@
+"""Class to hold average and current values (such as loss values).
+
+Typical usage example:
+    l = AverageMeter('autoencoder_loss')
+    l.update(2.33)
+"""
+
 class AverageMeter(object):
     """Computes and stores the average and current value (such as loss values).
 
