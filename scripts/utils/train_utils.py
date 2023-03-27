@@ -1,3 +1,25 @@
+"""Utility file to load and save model training checkpoints.
+
+Saves the model and associated parameters into a .bin file.
+Typically used to save model progress after every 20%.
+If loading a model, must specify the model string.
+Options: 'c2g', 'text2embedding', 'DAE', 'autoencoder', 'baseline', 'text2embedding_gan', 'autoencoder_vq'
+
+Typical usage example:
+    save_checkpoint({
+        args: ArgumentParser object with the current parameters.
+        epoch: The epoch that have been completed.
+        lang_model: Vocab object containing the trained word vector representation.
+        pose_dim: An integer value of the number of dimensions of a single gesture.
+        gen_dict: A state_dict from a PyTorch Neural Net subclass.args:
+    }, 'autoencoder_progress_20.bin')
+
+    or
+
+    m = load_checkpoint_and_model('output/model.bin', 'gpu', 'autoencoder_vq')
+"""
+
+
 import logging
 import os
 from logging.handlers import RotatingFileHandler
@@ -101,7 +123,8 @@ def load_checkpoint_and_model(
     Args:
         checkpoint_path: The string filepath to find the file to load.
         _device: A string or torch.device indicating the availability of a GPU. Default value is 'cpu'.
-        what: A string specifying the particular model to load. Options: 'c2g', 'text2embedding', 'DAE', 'autoencoder', 'baseline', 'text2embedding_gan', 'autoencoder_vq'
+        what: A string specifying the particular model to load.
+            Options: 'c2g', 'text2embedding', 'DAE', 'autoencoder', 'baseline', 'text2embedding_gan', 'autoencoder_vq'
 
     Returns a Tuple:
         args: ArgumentParser object containing model and data parameters used.
