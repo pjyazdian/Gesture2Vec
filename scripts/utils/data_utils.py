@@ -47,6 +47,11 @@ class SubtitleWrapper:
     TIMESTAMP_PATTERN = re.compile("(\d+)?:?(\d{2}):(\d{2})[.,](\d{3})")
 
     def __init__(self, subtitle_path: str):
+        """Initialization method.
+
+        Args:
+            subtitle_path: The string filepath to the subtitle (JSON) file.
+        """
         self.subtitle = []
         self.load_gentle_subtitle(subtitle_path)
 
@@ -59,7 +64,6 @@ class SubtitleWrapper:
 
         Modifies the internal state of this object.
         The subtitles are loaded in order with a single word appended as a single element.
-        Uses the gentle lib.
 
         Args:
             substitle_path: The string filepath to the subtitle (JSON) file.
