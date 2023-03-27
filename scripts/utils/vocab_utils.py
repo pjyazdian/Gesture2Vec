@@ -8,7 +8,13 @@ import pyarrow
 from model.vocab import Vocab
 
 
-def build_vocab(name: str, dataset_list: list, cache_path: str, word_vec_path: str = None, feat_dim: int | None = None) -> Vocab:
+def build_vocab(
+    name: str,
+    dataset_list: list,
+    cache_path: str,
+    word_vec_path: str = None,
+    feat_dim: int | None = None,
+) -> Vocab:
     """Build a language vector representation model from an existing source.
 
     Builds a language model using existing (English) FastText vector representations.
@@ -29,27 +35,27 @@ def build_vocab(name: str, dataset_list: list, cache_path: str, word_vec_path: s
     Raises:
         Assertion that the model is consistent with its embedded weights.
     """
-    logging.info('  building a language model...')
+    logging.info("  building a language model...")
     if not os.path.exists(cache_path):
         lang_model = Vocab(name)
         for dataset in dataset_list:
-            logging.info('    indexing words from {}'.format(dataset.lmdb_dir))
+            logging.info("    indexing words from {}".format(dataset.lmdb_dir))
             index_words(lang_model, dataset.lmdb_dir)
 
         if word_vec_path is not None:
             lang_model.load_word_vectors(word_vec_path, feat_dim)
 
-        with open(cache_path, 'wb') as f:
+        with open(cache_path, "wb") as f:
             pickle.dump(lang_model, f)
     else:
-        logging.info('    loaded from {}'.format(cache_path))
-        with open(cache_path, 'rb') as f:
+        logging.info("    loaded from {}".format(cache_path))
+        with open(cache_path, "rb") as f:
             lang_model: Vocab = pickle.load(f)
 
         if word_vec_path is None:
             lang_model.word_embedding_weights = None
         elif lang_model.word_embedding_weights.shape[0] != lang_model.n_words:
-            logging.warning('    failed to load word embedding weights. check this')
+            logging.warning("    failed to load word embedding weights. check this")
             assert False
 
     return lang_model
@@ -72,15 +78,14 @@ def index_words(lang_model: Vocab, lmdb_dir: str) -> None:
     for key, buf in cursor:
         video = pyarrow.deserialize(buf)
 
-        for clip in video['clips']:
-            for word_info in clip['words']:
+        for clip in video["clips"]:
+            for word_info in clip["words"]:
                 word = word_info[0]
                 lang_model.index_word(word)
 
     lmdb_env.close()
-    logging.info('    indexed %d words' % lang_model.n_words)
+    logging.info("    indexed %d words" % lang_model.n_words)
 
     # filtering vocab
     # MIN_COUNT = 3
     # lang_model.trim(MIN_COUNT)
-
