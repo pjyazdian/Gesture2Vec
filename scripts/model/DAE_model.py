@@ -1,22 +1,49 @@
+"""
+"""
+
+
+import math
+from typing import Tuple
 import torch
-from torch.autograd import Variable
 import torch.nn as nn
 import torch.nn.functional as F
-import math
-from torch.distributions import Categorical, RelaxedOneHotCategorical
+from torch.distributions import RelaxedOneHotCategorical
 
 class DAE_Network(nn.Module):
-    def __init__(self, motion_dim, latent_dim):
+    """Autoencoder neural net with Linear layers as the encoder and decoder.
+
+    Neural net for frame-level generation of gestures.
+
+    Attributes:
+        dropout: A PyTorch Dropout layer with a 20% chance of dropout.
+        encoder: A PyTorch Linear Layer with a ReLU activation function.
+        decoder: A PyTorch Linear layer.
+    """
+
+    def __init__(self, motion_dim: int, latent_dim: int):
+        """Initialization method.
+
+        Initializes all attributes. For arg latent_dim, there are sentinel values of -1 and -2.
+        Value of -1 indicates to skip the neural net for ablation-study.
+        Value of -2 indicates Linear transformation to size 200 latent space with 30% dropout layer.
+
+        Args:
+            motion_dim: The original integer dimension of the training data.
+            latent_dim: The integer size of the latent code space.
+        """
         super(DAE_Network, self).__init__()
-        print("init DAE");
+        print('init DAE')
 
         self.dropout = nn.Dropout(0.2)
 
-        if latent_dim == -1: # To skip this network for ablation-study
+        # To skip this network for ablation-study
+        if latent_dim == -1:
             self.encoder = None
             self.decoder = None
             return
-        if latent_dim == -2: # Linear transformation
+
+        # Linear transformation
+        if latent_dim == -2:
             self.encoder = nn.Sequential(nn.Linear(motion_dim, 200),)
             self.decoder = nn.Sequential(nn.Linear(200, motion_dim),)
             self.dropout = nn.Dropout(0.3)
@@ -25,55 +52,58 @@ class DAE_Network(nn.Module):
         self.encoder = nn.Sequential(
             nn.Linear(motion_dim, latent_dim),
             nn.ReLU(),
-            # nn.Linear(2 * latent_dim, latent_dim),
-            # nn.Tanh(),
-            # nn.Linear(32, 32),
-            # nn.Tanh(),
         )
-
         self.decoder = nn.Sequential(
-            # nn.Linear(latent_dim, 2* latent_dim),
-            # nn.Tanh(),
             nn.Linear( latent_dim, motion_dim),
-            # nn.Tanh(),
-            # nn.Linear(100, motion_dim),
-
         )
 
 
-    def forward(self, x, get_latent=False):
+    def forward(self, x: torch.Tensor, get_latent: bool = False) -> torch.Tensor | Tuple[torch.Tensor, torch.Tensor]:
+        """Forward pass through the net.
 
-        CHECK = x.cpu().detach().numpy()
+        Only a single epoch is needed (Encoder and Decoder are Linear layers only).
+        If sentinel value of -1 was used during initialization then
+        early termination of method occurs.
 
-        if self.encoder == None:
+        Args:
+            x: The training data as a PyTorch Tensor.
+            get_latent: Boolean that indicates whether to return the latent space between encoder and decoder.
+
+        Returns:
+            Either a single PyTorch Tensor or a Tuple containing 2 PyTorch Tensors.
+
+            Case 1 - Encoder is None (ie. -1 was used during initialization):
+                Return the input data only.
+            Case 2 - Encoder is None and get_latent is True:
+                Return the input data as both Tensors.
+            Case 3 - Encoder is not None:
+                Return the output data as normal.
+            Case 4 - Encoder is not None and get_latent is True:
+                Return the output data and the latent space as 2 Tensors respectively.
+        """
+        if self.encoder is None:
             if get_latent:
                 return x, x
-            return x
-
-        # print("_________________")
-        # print(self.encoder)
-        # print(x.shape)
-        # print("_________________")
-        x = torch.squeeze(x)
-        x_np = x.cpu().detach().numpy()
-        # print(x.shape)A regular autoencoder (similar to part1) with a bottleneck size of 30 dimensions, and Tanh activation function, and turning some of the inputs values to zero.
-        x = self.dropout(x)
-        x = self.encoder(x)
-        latent = x.detach().clone()
-        # print("Encoded", x.shape)
-        x = self.decoder(x)
-        x = torch.unsqueeze(x, 2)
-        # print("Decoder", x.shape)
+            else:
+                return x
+        input_data = torch.squeeze(x)
+        partial_input_data: torch.Tensor = self.dropout(input_data)
+        latent_space: torch.Tensor = self.encoder(partial_input_data)
+        latent_copy = latent_space.detach().clone()
+        output_data: torch.Tensor = self.decoder(latent_space)
+        format_output_data = torch.unsqueeze(output_data, 2)
         if get_latent:
-            return x, latent
+            return format_output_data, latent_copy
         else:
-            return x
+            return format_output_data
 
 # Vector quantization at the frame level
 class VQ_Frame(nn.Module):
+    """
+    """
     def __init__(self, motion_dim, latent_dim, vae, vq_components):
         super(VQ_Frame, self).__init__()
-        print("init VQ_DAE");
+        print("init VQ_DAE")
 
 
         self.encoder = nn.Sequential(
@@ -129,6 +159,7 @@ class VQ_Frame(nn.Module):
         std = torch.exp(logVar / 2)
         eps = torch.randn_like(std)
         # Todo: fix this for train and test time checking
+        # Add noise with std and eps for training only
         if train:
             return mu + std * eps
         else:
@@ -186,43 +217,47 @@ class VQ_Frame(nn.Module):
 
 
 class VQ_Payam(nn.Module):
-    def __init__(self, num_embeddings, embedding_dim, commitment_cost):
+    """A Vector-Quantized Autoencoder neural net.
+    """
+
+    def __init__(self, num_embeddings: int, embedding_dim: int, commitment_cost: float):
+        """Initialization method.
+
+        Args:
+            num_embeddings: The integer dimension of the input training data.
+            embedding_dim: The integer size of the latent space.
+            commitment_cost: A float percentage to apply to latent loss calculations.
+        """
         super(VQ_Payam, self).__init__()
         self._embedding_dim = embedding_dim
         self._num_embeddings = num_embeddings
-
-        self.pre_linear = nn.Linear(self._embedding_dim, self._embedding_dim)
-
         self._embedding = nn.Embedding(self._num_embeddings, self._embedding_dim)
         self._embedding.weight.data.uniform_(-1 / self._num_embeddings, 1 / self._num_embeddings)
-
         self._commitment_cost = commitment_cost
 
-    def forward(self, inputs):
+    def forward(self, inputs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Forward pass through the net.
 
-        loss_vq, loss, perplexity_vq, encodings = torch.tensor(0), torch.tensor(0), \
-                                                  torch.tensor(0), torch.tensor(0)
+        Args:
+
+        Returns:
+            A 4-Tuple as follows:
+            loss: A Tensor containing MSE loss
+            quantized:
+            perplexity:
+            encodings:
+        """
         # 1. Pre-Linear
         flat_input = inputs.view(-1, self._embedding_dim)
-        # flat_input = self.pre_linear(flat_input)
 
-        # __________________________
         # 2. Calculate distances
         distances = (torch.sum(flat_input ** 2, dim=1, keepdim=True)
                      + torch.sum(self._embedding.weight ** 2, dim=1)
                      - 2 * torch.matmul(flat_input, self._embedding.weight.t()))
-        debug = False
-        if debug:
-            print("VQ_flat_input", flat_input.shape)
-            print("VQ_distances", distances.shape)
 
         # 3. Find nearest encoding
         encoding_indices = torch.argmin(distances, dim=1).unsqueeze(1)
-
-        # for ind in encoding_indices:
-        #     print("Idices: ", ind)
-
-        encodings = torch.zeros(encoding_indices.shape[0], self._num_embeddings, device=inputs.device)
+        encodings: torch.Tensor = torch.zeros(encoding_indices.shape[0], self._num_embeddings, device=inputs.device)
         encodings.scatter_(1, encoding_indices, 1)
 
         # 4. Quantize and unflatten
@@ -234,16 +269,12 @@ class VQ_Payam(nn.Module):
         q_latent_loss = F.mse_loss(quantized, inputs.detach())
         loss =  q_latent_loss +  self._commitment_cost * e_latent_loss
 
+        # 6. Calculate outputs
         quantized = inputs + (quantized - inputs).detach()
         avg_probs = torch.mean(encodings, dim=0)
         perplexity = torch.exp(-torch.sum(avg_probs * torch.log(avg_probs + 1e-10)))
         return loss, quantized.contiguous(), perplexity, encodings
-        # ___________________________
 
-
-        quantized = torch.reshape(flat_input, inputs.shape).contiguous()
-
-        return loss, quantized, perplexity_vq, encodings
 
 class VQ_Payam_EMA(nn.Module):
     def __init__(self, num_embeddings, embedding_dim, commitment_cost,

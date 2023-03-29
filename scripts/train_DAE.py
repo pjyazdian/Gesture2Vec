@@ -1,63 +1,56 @@
-import datetime
+"""
+"""
+
+
 import os
 import pprint
 import random
 import time
 import sys
+import pickle
+from typing import Tuple
 import numpy as np
-import torch
+import matplotlib.pyplot as plt
+import seaborn as sns
+from openTSNE import TSNE
+from scipy.signal import savgol_filter
+from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
-
+import torch
 from torch.utils.data import DataLoader
+from torch import optim
+from configargparse import argparse
+
+from config.parse_args import parse_args
+from data_loader.lmdb_data_loader import *
+from train_eval.train_seq2seq import train_iter_DAE
+import utils.train_utils
+from utils.average_meter import AverageMeter
+from utils.vocab_utils import build_vocab
+from model.DAE_model import DAE_Network, VQ_Frame, VAE_Network
+from model.vocab import Vocab
 
 [sys.path.append(i) for i in ['.', '..']]
 
-from model import vocab
-from model.seq2seq_net import Seq2SeqNet
-from train_eval.train_seq2seq import train_iter_seq2seq, train_iter_DAE
-from utils.average_meter import AverageMeter
-from utils.vocab_utils import build_vocab
-
-from config.parse_args import parse_args
-
-from torch import optim
-
-from data_loader.lmdb_data_loader import *
-import utils.train_utils
-
-import seaborn as sns
-from sklearn.decomposition import PCA
-from openTSNE import TSNE
-import matplotlib.pyplot as plt
-from scipy.signal import savgol_filter
-
-from model.DAE_model import DAE_Network, VQ_Frame, VAE_Network
-import pickle
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
 global Global_loss_train
 global Global_loss_eval
-
 Train_Deoising = False
 
-def init_model(args, lang_model, pose_dim, _device):
+def init_model(args: argparse.Namespace, lang_model: Vocab, pose_dim: int, _device: torch.device | str) -> Tuple[torch.nn.Module, torch.nn.MSELoss]:
     n_frames = args.n_poses
     # generator = Seq2SeqNet(args, pose_dim, n_frames, lang_model.n_words, args.wordembed_dim,
     #                        lang_model.word_embedding_weights).to(_device)
     motion_dim = 162#162 #135
     # try:
-    if args.autoencoder_vq=='True':
+    if args.autoencoder_vq == 'True':
         Network = VQ_Frame(motion_dim, args.hidden_size,
                            args.autoencoder_vae=='True',
                            int(args.autoencoder_vq_components))
     elif args.autoencoder_vae == 'True':
         Network = VAE_Network(motion_dim, args.hidden_size)
-
     else:
         Network = DAE_Network(motion_dim, args.hidden_size)
-
-    # except:
-    #     Network = DAE_Network(motion_dim, args.hidden_size)
 
     loss_fn = torch.nn.MSELoss()
     Network = Network.to(device)
@@ -175,10 +168,10 @@ def train_epochs(args, train_data_loader, test_data_loader, lang_model, pose_dim
                 loss, perplexity = train_iter_DAE(args, epoch, original, original, generator, gen_optimizer)
                 train_res_recon_error.append(loss['loss'])
                 train_res_perplexity.append(perplexity.item())
-            if Train_Deoising:
-                loss = train_iter_DAE(args, epoch, noisy, original, generator, gen_optimizer)
-            else:
-                loss = train_iter_DAE(args, epoch, original, original, generator, gen_optimizer)
+            # if Train_Deoising:
+            loss = train_iter_DAE(args, epoch, noisy, original, generator, gen_optimizer)
+            # else:
+            #     loss = train_iter_DAE(args, epoch, original, original, generator, gen_optimizer)
 
 
             # loss values
@@ -249,7 +242,7 @@ def evaluate_testset(test_data_loader, generator, loss_fn, args):
 def main(config, train_loader, test_loader, lang_model, H, vq_ncomponent=1):
     args = config['args']
     args.hidden_size = H
-    args.autoencoder_vq_components = vq_ncomponent
+    # ssssssssssssssssssssssssssssssssssssssssssssssssssssargs.autoencoder_vq_components = vq_ncomponent
     if args.autoencoder_vq=='True': # ths was for training a lot of networks
         args.model_save_path +='/'+str(vq_ncomponent)
     # args.epochs = 20
@@ -425,6 +418,7 @@ if __name__ == '__main__':
     eval_loss_list = []
     dim_lost = []
     backupsv = _args.model_save_path
+    # 40 for project
     for k in range(45, 46, 1):
         print("*******************************************************************")
         print("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
