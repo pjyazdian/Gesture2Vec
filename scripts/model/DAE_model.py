@@ -10,9 +10,11 @@ import torch.nn.functional as F
 from torch.distributions import RelaxedOneHotCategorical
 
 class DAE_Network(nn.Module):
-    """Autoencoder neural net with Linear layers as the encoder and decoder.
+    """Autoencoder neural net with noise.
 
     Neural net for frame-level generation of gestures.
+    Uses Linear layers for both encoder and decoder.
+    Adds noise during the training process using a Dropout layer.
 
     Attributes:
         dropout: A PyTorch Dropout layer with a 20% chance of dropout.
@@ -21,9 +23,9 @@ class DAE_Network(nn.Module):
     """
 
     def __init__(self, motion_dim: int, latent_dim: int):
-        """Initialization method.
+        """Initialize with the dataset and the latent code space dimensions.
 
-        Initializes all attributes. For arg latent_dim, there are sentinel values of -1 and -2.
+        For 'latent_dim', there are sentinel values of -1 and -2.
         Value of -1 indicates to skip the neural net for ablation-study.
         Value of -2 indicates Linear transformation to size 200 latent space with 30% dropout layer.
 
@@ -54,7 +56,7 @@ class DAE_Network(nn.Module):
             nn.ReLU(),
         )
         self.decoder = nn.Sequential(
-            nn.Linear( latent_dim, motion_dim),
+            nn.Linear(latent_dim, motion_dim),
         )
 
 
@@ -100,8 +102,22 @@ class DAE_Network(nn.Module):
 # Vector quantization at the frame level
 class VQ_Frame(nn.Module):
     """
+
+    Attributes:
+        encoder:
+        decoder:
+        bachnorm:
+        skip_vq:
+        vq_components:
+        commitment_cost
+        decay:
+        vq_layer:
+        gs_soft:
+        log_scale:
+        dropout:
+        vae:
     """
-    def __init__(self, motion_dim, latent_dim, vae, vq_components):
+    def __init__(self, motion_dim: int, latent_dim: int, vae: bool, vq_components: int):
         super(VQ_Frame, self).__init__()
         print("init VQ_DAE")
 
@@ -153,8 +169,17 @@ class VQ_Frame(nn.Module):
 
 
 
-    def reparameterize(self, mu, logVar, train=True):
+    def reparameterize(self, mu: torch.Tensor, logVar: torch.Tensor, train: bool = True) -> torch.Tensor:
+        """
 
+        Args:
+            mu:
+            logVar:
+            train:
+
+        Returns:
+            A PyTorch Tensor.
+        """
         # Reparameterization takes in the input mu and logVar and sample the mu + std * eps
         std = torch.exp(logVar / 2)
         eps = torch.randn_like(std)
@@ -165,7 +190,16 @@ class VQ_Frame(nn.Module):
         else:
             return mu # + std * eps
 
-    def forward(self, x, Inference=False):
+    def forward(self, x: torch.Tensor, inference: bool = False) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor] | Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+
+        Args:
+            x:
+            inference:
+
+        Returns:
+            A 3-Tuple or 5-Tuple:
+        """
         # print("_________________")
         # print(self.encoder)
         # print(x.shape)
@@ -204,7 +238,7 @@ class VQ_Frame(nn.Module):
 
 
         # print("Decoder", x.shape)
-        if Inference:
+        if inference:
             return x, latent, encodings
         else:
             if self.gs_soft:
@@ -239,10 +273,11 @@ class VQ_Payam(nn.Module):
         """Forward pass through the net.
 
         Args:
+            inputs: A PyTorch Tensor of training data.
 
         Returns:
-            A 4-Tuple as follows:
-            loss: A Tensor containing MSE loss
+            A 4-Tuple:
+            loss: A PyTorch Tensor of loss calculations (MSELoss).
             quantized:
             perplexity:
             encodings:
@@ -277,17 +312,27 @@ class VQ_Payam(nn.Module):
 
 
 class VQ_Payam_EMA(nn.Module):
-    def __init__(self, num_embeddings, embedding_dim, commitment_cost,
-                 decay, epsilon=1e-5):
+    """A Vector-Quantized Autoencoder neural net.
+
+    Attributes:
+        pre_linear: A PyTorch Linear layer.
+    """
+    def __init__(self, num_embeddings: int, embedding_dim: int, commitment_cost: float, decay: float, epsilon: float = 1e-5):
+        """Initialization method.
+
+        Args:
+            num_embeddings:
+            embedding_dim:
+            commitment_cost:
+            decay:
+            epsilon:
+        """
         super(VQ_Payam_EMA, self).__init__()
         self._embedding_dim = embedding_dim
         self._num_embeddings = num_embeddings
-
         self.pre_linear = nn.Linear(self._embedding_dim, self._embedding_dim)
-
         self._embedding = nn.Embedding(self._num_embeddings, self._embedding_dim)
         self._embedding.weight.data.uniform_(-1 / self._num_embeddings, 1 / self._num_embeddings)
-
         self._commitment_cost = commitment_cost
 
         #EMA
@@ -298,8 +343,19 @@ class VQ_Payam_EMA(nn.Module):
         self._decay = decay
         self._epsilon = epsilon
 
-    def forward(self, inputs):
+    def forward(self, inputs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Forward pass through the net.
 
+        Args:
+            inputs:
+
+        Returns:
+            A 4-Tuple:
+            loss: A PyTorch Tensor of loss calculations (MSELoss).
+            quantized:
+            perplexity:
+            encodings:
+        """
         loss_vq, loss, perplexity_vq, encodings = torch.tensor(0), torch.tensor(0), \
                                                   torch.tensor(0), torch.tensor(0)
         # 1. Pre-Linear
@@ -365,8 +421,23 @@ class VQ_Payam_EMA(nn.Module):
         return loss, quantized, perplexity_vq, encodings
 
 class VQ_Payam_GSOFT(nn.Module):
-    def __init__(self, num_embeddings, embedding_dim, commitment_cost,
-                 decay, epsilon=1e-5):
+    """
+
+    Attributes:
+        pre_linear:
+    """
+
+    def __init__(self, num_embeddings: int, embedding_dim: int, commitment_cost: float,
+                 decay: float, epsilon: float = 1e-5):
+        """Initialization function.
+
+        Args:
+            num_embeddings:
+            embedding_dim:
+            commitment_cost:
+            decay:
+            epsilon:
+        """
         super(VQ_Payam_GSOFT, self).__init__()
         self._embedding_dim = embedding_dim
         self._num_embeddings = num_embeddings
@@ -382,8 +453,19 @@ class VQ_Payam_GSOFT(nn.Module):
 
 
 
-    def forward(self, inputs):
+    def forward(self, inputs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
 
+        Args:
+            inputs:
+
+        Returns:
+            A 4-Tuple:
+            KL:
+            quantized:
+            perplexity:
+            encodings:
+        """
         loss_vq, loss, perplexity_vq, encodings = torch.tensor(0), torch.tensor(0), \
                                                   torch.tensor(0), torch.tensor(0)
         # 1. Pre-Linear
@@ -418,7 +500,7 @@ class VQ_Payam_GSOFT(nn.Module):
 
 
         # 5. Loss
-        KL = dist.probs * (dist.logits + math.log(self._num_embeddings))
+        KL: torch.Tensor = dist.probs * (dist.logits + math.log(self._num_embeddings))
         # print("KL_Shape", KL.shape) #128 * 100
         KL[(dist.probs == 0).expand_as(KL)] = 0
         KL = KL.sum(dim=0)
@@ -438,9 +520,26 @@ class VQ_Payam_GSOFT(nn.Module):
         return loss, quantized, perplexity_vq, encodings
 
 class VAE_Network(nn.Module):
-    def __init__(self, motion_dim, latent_dim):
+    """Variational Autoencoder neural net.
+
+    Attributes:
+        encoder:
+        decoder:
+        dropout:
+        vae:
+        VAE_fc_mean:
+        VAE_fc_std
+        VAE_fc_decoder:
+    """
+    def __init__(self, motion_dim: int, latent_dim: int):
+        """Initialize with the dataset and the latent code space dimensions.
+
+        Args:
+            motion_dim: The original integer dimension of the training data.
+            latent_dim: The integer size of the latent code space.
+        """
         super(VAE_Network, self).__init__()
-        print("init VAE_Network");
+        print("init VAE_Network")
         self.encoder = nn.Sequential(
             nn.Linear(motion_dim, latent_dim),
             nn.Tanh(),
@@ -461,7 +560,22 @@ class VAE_Network(nn.Module):
         self.VAE_fc_std = nn.Linear(latent_dim, latent_dim)
         self.VAE_fc_decoder = nn.Linear(latent_dim, latent_dim)
 
-    def reparameterize(self, mu, logVar, train=True):
+    def reparameterize(self, mu: torch.Tensor, logVar: torch.Tensor, train: bool = True) -> torch.Tensor:
+        """Return 'mu' untouched or if 'train' then add noise based on 'logVar'.
+
+        The noise added is random weight * exp('logVar'/2).
+
+        Args:
+            mu: A Tensor containing mean values.
+            logVar: A Tensor of values used to derive standard deviation.
+            train: A boolean whether to add the mean and random std as noise.
+
+        Returns:
+            Case 1 - 'train' is True (default):
+                A Tensor with a random amount of std added as noise.
+            Case 2 - 'train' is false:
+                Return the input 'mu' untouched.
+        """
 
         # Reparameterization takes in the input mu and logVar and sample the mu + std * eps
         std = torch.exp(logVar / 2)
@@ -472,7 +586,26 @@ class VAE_Network(nn.Module):
         else:
             return mu  # + std * eps
 
-    def forward(self, x, get_latent=False):
+    def forward(self, x: torch.Tensor, get_latent: bool = False) -> Tuple[torch.Tensor, torch.Tensor] | Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Forward pass through the net.
+
+        Args:
+            x: A Tensor containing the training data.
+            get_latent: A boolean whether to return the latent space code as a Tensor.
+
+        Returns:
+            A 2-Tuple or 3-Tuple:
+
+            Case 1 - 'get_latent' is False (default):
+                Return a 2-Tuple:
+                    x: A Tensor containing the output.
+                    latent: A Tensor containing the latent code space.
+            Case 2 - 'get_latent' is True:
+                Return a 3-Tuple:
+                    x: A Tensor containing the output.
+                    logVar: A Tensor of base values used for std (after FC Layer).
+                    mean: A Tensor of values used as mean values (after FC Layer).
+        """
         # print("_________________")
         # print(self.encoder)
         # print(x.shape)
