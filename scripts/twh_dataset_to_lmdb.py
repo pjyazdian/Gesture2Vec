@@ -148,7 +148,8 @@ def process_bvh_test1(gesture_filename, dump_pipeline=False):
 
     return out_matrix[0]
 
-def make_lmdb_gesture_dataset(base_path):
+def make_lmdb_gesture_dataset(args: argparse.Namespace) -> None:
+    base_path: str = args.db_path
     gesture_path = os.path.join(base_path, 'bvh')
     audio_path = os.path.join(base_path, 'wav')
     text_path = os.path.join(base_path, 'tsv')
@@ -275,5 +276,4 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("db_path", type=Path)
     args = parser.parse_args()
-
-    make_lmdb_gesture_dataset(args.db_path)
+    make_lmdb_gesture_dataset(args)
