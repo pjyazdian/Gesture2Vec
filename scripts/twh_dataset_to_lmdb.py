@@ -1,3 +1,7 @@
+"""
+"""
+
+
 import argparse
 import glob
 import os
@@ -23,7 +27,20 @@ target_joints = ['b_spine0', 'b_spine1', 'b_spine2', 'b_spine3', 'b_l_shoulder',
 # target_joints = ['body_world', 'b_root', 'b_l_upleg', 'b_l_leg', 'b_r_upleg', 'b_r_leg', 'b_spine0', 'b_spine1', 'b_spine2', 'b_spine3', 'b_l_shoulder', 'b_l_arm', 'b_l_arm_twist', 'b_l_forearm', 'b_l_wrist_twist', 'b_l_wrist', 'b_l_pinky1', 'b_l_pinky2', 'b_l_pinky3', 'b_l_ring1', 'b_l_ring2', 'b_l_ring3', 'b_l_middle1', 'b_l_middle2', 'b_l_middle3', 'b_l_index1', 'b_l_index2', 'b_l_index3', 'b_l_thumb0', 'b_l_thumb1', 'b_l_thumb2', 'b_l_thumb3', 'b_r_shoulder', 'b_r_arm', 'b_r_arm_twist', 'b_r_forearm', 'b_r_wrist_twist', 'b_r_wrist', 'b_r_thumb0', 'b_r_thumb1', 'b_r_thumb2', 'b_r_thumb3', 'b_r_pinky1', 'b_r_pinky2', 'b_r_pinky3', 'b_r_middle1', 'b_r_middle2', 'b_r_middle3', 'b_r_ring1', 'b_r_ring2', 'b_r_ring3', 'b_r_index1', 'b_r_index2', 'b_r_index3', 'b_neck0', 'b_head']
 
 
-def process_bvh(gesture_filename, dump_pipeline=False):
+def process_bvh(gesture_filename: str, dump_pipeline: bool = False) -> np.ndarray:
+    """Converts a bvh file to a numpy array.
+
+    Several parameters are fixed in this function as follows:
+        - 30 frames per second for each clip.
+        - 15/24/56 joints included in 'target_joints' global variable above.
+
+    Args:
+        gesture_filename: The string filename of a specific gesture (bvh) file.
+        dump_pipeline: A boolean to save the Pipeline to '../resource/data_pipe.sav'.
+
+    Returns:
+        A Numpy array of the gestures.
+    """
     p = BVHParser()
 
     data_all = list()
@@ -54,7 +71,20 @@ def process_bvh(gesture_filename, dump_pipeline=False):
 
     return out_matrix[0]
 
-def process_bvh_rot_only(gesture_filename, dump_pipeline=False):
+def process_bvh_rot_only(gesture_filename: str, dump_pipeline: bool = False) -> np.ndarray:
+    """Converts a bvh file to a numpy array.
+
+    Several parameters are fixed in this function as follows:
+        - 30 frames per second for each clip.
+        - 15/24/56 joints included in 'target_joints' global variable above.
+
+    Args:
+        gesture_filename: The string filename of a specific gesture (bvh) file.
+        dump_pipeline: A boolean to save the Pipeline to '../resource/data_pipe.sav'.
+
+    Returns:
+        A Numpy array of the gestures.
+    """
     p = BVHParser()
 
     data_all = list()
@@ -85,7 +115,20 @@ def process_bvh_rot_only(gesture_filename, dump_pipeline=False):
     return out_matrix[0]
 
 
-def process_bvh_rot_only_Taras(gesture_filename, dump_pipeline=False):
+def process_bvh_rot_only_Taras(gesture_filename: str, dump_pipeline: bool = False) -> np.ndarray:
+    """Converts a bvh file to a numpy array.
+
+    Several parameters are fixed in this function as follows:
+        - 30 frames per second for each clip.
+        - 15/24/56 joints included in 'target_joints' global variable above.
+
+    Args:
+        gesture_filename: The string filename of a specific gesture (bvh) file.
+        dump_pipeline: A boolean to save the Pipeline to '../resource/data_pipe.sav'.
+
+    Returns:
+        A Numpy array of the gestures.
+    """
     p = BVHParser()
 
     data_all = list()
@@ -117,7 +160,20 @@ def process_bvh_rot_only_Taras(gesture_filename, dump_pipeline=False):
     return out_matrix[0]
 
 
-def process_bvh_test1(gesture_filename, dump_pipeline=False):
+def process_bvh_test1(gesture_filename: str, dump_pipeline: bool = False) -> np.ndarray:
+    """Converts a bvh file to a numpy array.
+
+    Several parameters are fixed in this function as follows:
+        - 30 frames per second for each clip.
+        - 15/24/56 joints included in 'target_joints' global variable above.
+
+    Args:
+        gesture_filename: The string filename of a specific gesture (bvh) file.
+        dump_pipeline: A boolean to save the Pipeline to '../resource/data_pipe.sav'.
+
+    Returns:
+        A Numpy array of the gestures.
+    """
     p = BVHParser()
 
     data_all = list()
@@ -149,6 +205,15 @@ def process_bvh_test1(gesture_filename, dump_pipeline=False):
     return out_matrix[0]
 
 def make_lmdb_gesture_dataset(args: argparse.Namespace) -> None:
+    """Converts the dataset (audio, bvh and transcripts) into LMDB files.
+
+    Main function. Saves the files into LMDB files in a new folder ('lmdb') within a directory.
+    The data is separated into train and test datasets.
+
+    Args:
+        args: A configargparse object containing several parameters:
+            - 'db_path': The string file path that contains the files.
+    """
     base_path: str = args.db_path
     gesture_path = os.path.join(base_path, 'bvh')
     audio_path = os.path.join(base_path, 'wav')
@@ -159,7 +224,7 @@ def make_lmdb_gesture_dataset(args: argparse.Namespace) -> None:
 
     map_size = 1024 * 20  # in MB
     map_size <<= 20  # in B
-    db = [lmdb.open(os.path.join(out_path, 'lmdb_train'), map_size=map_size),
+    db: list[lmdb.Environment] = [lmdb.open(os.path.join(out_path, 'lmdb_train'), map_size=map_size),
           lmdb.open(os.path.join(out_path, 'lmdb_test'), map_size=map_size)]
 
     # delete existing files
