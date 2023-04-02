@@ -1,4 +1,16 @@
-"""
+"""This file converts the Trinity dataset to lmdb files.
+
+This file must be independently run before the main training and inference files.
+This file originally converted data from the GENEA Challenge 2020 available at:
+(ex. https://trinityspeechgesture.scss.tcd.ie/data/Trinity%20Speech-Gesture%20I/GENEA_Challenge_2020_data_release/)
+The original dataset contains audio (.wav), gestures (.bvh) and text (.json) files.
+These files are converted into LMDB files for use in this project.
+
+Typical usage example:
+    python trinity_data_to_lmdb.py <PATH_TO_DATASET>
+
+Note: PATH_TO_DATASET should be a directory containing the directories:
+'Audio', 'Motion', 'Transcripts' with the .wav, .bvh and .json files, respectively.
 """
 
 
@@ -98,7 +110,7 @@ def make_lmdb_gesture_dataset(args: argparse.Namespace) -> None:
     The data is separated into train and test datasets.
 
     Args:
-        args: A configargparse object containing several parameters
+        args: A configargparse object containing several parameters:
             - 'db_path': The string file path that contains the files.
     """
     base_path: str = args.db_path
