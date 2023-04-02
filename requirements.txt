@@ -10,6 +10,7 @@ matplotlib==3.7.1
 seaborn==0.12.2
 openTSNE==0.7.1
 tqdm==4.65.0
+librosa==0.10.0
 
 # If you have a NVIDIA GPU capable of using CUDA, no changes are required. Otherwise change commented line to CPU.
 --extra-index-url https://download.pytorch.org/whl/cu117
