@@ -326,11 +326,14 @@ class DataPreprocessor:
                         self.n_out_samples += 1
 
     @staticmethod
-    def get_words_in_time_range(word_list: list[dict], start_time: float, end_time: float) -> list[dict]:
+    def get_words_in_time_range(word_list: list[list], start_time: float, end_time: float) -> list[list]:
         """Retrieves words in the list that fall between the start_time and end_time provided.
 
         Args:
-            word_list: A list that contains a triple tuple with the second and third entries being time parameters to be compared against.
+            word_list: A list that each element contains a list with three elements:
+                index 0: A float start time.
+                index 1: A float end time.
+                index 2: A string word.
             start_time: A float indicating when to start filtering.
             end_time: A float indicating when to end filtering.
 
