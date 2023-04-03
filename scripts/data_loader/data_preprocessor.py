@@ -4,6 +4,7 @@
 import math
 import pickle
 import os
+from typing import Tuple
 
 import lmdb
 import numpy as np
@@ -12,6 +13,7 @@ import torch
 import librosa
 from tqdm import tqdm
 from configargparse import argparse
+from model.vocab import Vocab
 
 import utils
 
@@ -31,16 +33,24 @@ class DataPreprocessor:
         n_out_samples: An integer total number of database entries (audio, video and skeleton) that has been extracted from the original videos.
         sentence_frame_length: An integer number of frames in each clip but for sentences rather than gestures.
         audio_sampling_rate: An integer sampling rate for an audio signal.
-        rnn_representation:
-        ckpt_path_DAE:
-        ckpt_path_Autoencode:
+        DAE_frame_level: A DAE model only if args.name in the initialization method is not 'DAE'.
+        rnn_representation: A VQVAE model only if 'sentence_level' is True else None.
+        ckpt_path_DAE: A string filepath to a saved 'DAE' checkpoint model.
+        ckpt_path_Autoencode: A string filepath to a saved VQVAE checkpoint model.
     """
     def __init__(self, args: argparse.Namespace, clip_lmdb_dir: str, out_lmdb_dir: str, n_poses: int, subdivision_stride: int, pose_resampling_fps: int, sentence_level: bool = False):
-        """Initialization function.
+        """Initialize with several dataset parameters.
 
         Initializes database connections to the lmdb files. Note that the connections are open until closed by the run method.
 
+        The args argument must contain the following keys:
+            name: A string name of the model (ex. 'DAE' or 'autoencoder_vq').
+            rep_learning_checkpoint: If name is not 'DAE', a string filepath to a saved 'DAE' checkpoint model.
+            autoencoder_checkpoint: If sentence level is True, a string filepath to a saved VQVAE checkpoint model.
+            sentence_frame_length: An integer number of frames in each clip (for a sentence instead of gesture).
+
         Args:
+            args: A configargparser object with specific parameters (See above).
             clip_lmdb_dir: A string filepath containing the lmdb dataset files.
             out_lmdb_dir: A string filepath to save output as lmdb files.
             n_poses: An integer number of frames per second in each clip in the dataset (ex. 30 in 30 fps).
@@ -63,11 +73,11 @@ class DataPreprocessor:
         self.ckpt_path_Autoencode: str = args.autoencoder_checkpoint
 
         if args.name != "DAE":
-            self.DAE_frame_level = utils.train_utils.load_checkpoint_and_model(
+            self.DAE_frame_level: Tuple[argparse.Namespace, torch.nn.Module, torch.nn.MSELoss, Vocab, int] = utils.train_utils.load_checkpoint_and_model(
                 self.ckpt_path_DAE, device,'DAE')
 
         if self.sentence_level:
-            self.rnn_representation = utils.train_utils.load_checkpoint_and_model(
+            self.rnn_representation: Tuple[argparse.Namespace, torch.nn.Module, torch.nn.MSELoss, Vocab, int] = utils.train_utils.load_checkpoint_and_model(
                 self.ckpt_path_Autoencode, device, 'autoencoder_vq')
 
         # create db for samples
@@ -343,7 +353,9 @@ class DataPreprocessor:
         return words
 
 
-    def get_pose_latent(self, poses):
+    def get_pose_latent(self, poses: np.ndarray) -> np.ndarray:
+        """TODO
+        """
 
         # 1. Load models
         args, DAE, loss_fn, lang_model, out_dim = self.DAE_frame_level

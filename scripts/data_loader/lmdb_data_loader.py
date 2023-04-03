@@ -23,35 +23,37 @@ import utils
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-def word_seq_collate_fn(data: list) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, dict]:
+def word_seq_collate_fn(data: list) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, dict, torch.Tensor, torch.Tensor, torch.Tensor] | Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, dict]:
     """Collate function for loading word sequences in variable lengths.
 
+    This function returns extra values depending if sentence_leve is True or False.
+    sentence_leve is set to always True and must be manually changed.
+
     Args:
-        data: A list of samples
+        data: A list of samples including the following values in each element:
+            word_seq: A list of Tensors of word vector representations.
+            words_lengths: A list of Tensors of word lengths in word_seq.
+            poses_seq: A list of Tensors of poses/gestures.
+            audio: A list of Tensors of audio data.
 
     Returns:
         A 5-Tuple or 8-Tuple:
 
         8-Tuple (if sentence_level is set to True):
-            word_seq:
-            words_lengths:
-            poses_seq:
-            audio:
-            aux_info:
-            sentence_leve_latents:
-            cluster_portion:
-            GPT3_Embedding:
+            word_seq: A Tensor of word vector representations.
+            words_lengths: A Tensor of word lengths in word_seq.
+            poses_seq: A Tensor of poses/gestures.
+            audio: A Tensor of audio data.
+            aux_info: A dict containing info such as name, start/end frames and times.
+            sentence_leve_latents: #TODO
+            cluster_portion: #TODO
+            GPT3_Embedding: #TODO
 
         5-Tuple:
-            word_seq:
-            words_lengths:
-            poses_seq:
-            audio:
-            aux_info:
+            The first five values in the 8-Tuple.
     """
     # sort a list by sequence length (descending order) to use pack_padded_sequence
     data.sort(key=lambda x: len(x[0]), reverse=True)
-
 
     # separate source and target sequences
     # Todo: fix this using args
@@ -60,9 +62,6 @@ def word_seq_collate_fn(data: list) -> Tuple[torch.Tensor, torch.Tensor, torch.T
         word_seq, poses_seq, audio, aux_info, = zip(*data)
     else:
         word_seq, poses_seq, audio, aux_info, sentence_leve_latents, cluster_portion, GPT3_Embedding = zip(*data)
-
-
-
 
     # merge sequences
     words_lengths = torch.LongTensor([len(x) for x in word_seq])
@@ -85,10 +84,10 @@ def word_seq_collate_fn(data: list) -> Tuple[torch.Tensor, torch.Tensor, torch.T
 
 
 class TrinityDataset(Dataset):
-    """Contains information and and associated parameters of a (Trinity) dataset.
+    """Contains information and associated parameters of a (Trinity) dataset.
 
     This is a PyTorch Dataset subclass containing information of a Trinity dataset.
-    (ex. https://trinityspeechgesture.scss.tcd.ie/data/Trinity%20Speech-Gesture%20I/GENEA_Challenge_2020_data_release/)
+    https://trinityspeechgesture.scss.tcd.ie/data/Trinity%20Speech-Gesture%20I/GENEA_Challenge_2020_data_release/
 
     Attributes:
         lmdb_dir: A string representing the filepath of the directory containing the actual dataset.
@@ -101,11 +100,18 @@ class TrinityDataset(Dataset):
         data_mean: A mean calculated from each video in the original dataset.
         data_std: A standard deviation calculcated from each video in the original dataset.
     """
+
     def __init__(self, args: argparse.Namespace, lmdb_dir: str, n_poses: int, subdivision_stride: int, pose_resampling_fps: int, data_mean: list[float], data_std: list[float]):
-        """Initialization function.
+        """Initialize with multiple dataset parameters.
+
+        The args argument must contain the following keys:
+            name: A string name of the model (ex. 'DAE' or 'autoencoder_vq').
+            rep_learning_checkpoint: If name is not 'DAE', a string filepath to a saved 'DAE' checkpoint model.
+            autoencoder_checkpoint: If sentence level is True, a string filepath to a saved VQVAE checkpoint model.
+            sentence_frame_length: An integer number of frames in each clip (for a sentence instead of gesture).
 
         Args:
-            args: A configargparse object containing all parameters for the dataset and training found in a specified config file (ex. config/DAE.yml)
+            args: A configargparse object containing parameters (See above).
             lmdb_dir: A string representing the filepath of the directory containing the actual dataset.
             n_poses: An int representing the number of frames in each clip in the dataset (normally 30 (in 30 fps)).
             subdivision_stride: An int representing the number of frames between the start of one clip and the start of the next clip (clips can overlap).
@@ -131,22 +137,23 @@ class TrinityDataset(Dataset):
             logging.info('Found pre-loaded samples from {}'.format(preloaded_dir))
 
         # init lmdb
-        self.lmdb_env = lmdb.open(preloaded_dir, readonly=True, lock=False)
+        self.lmdb_env: lmdb.Environment = lmdb.open(preloaded_dir, readonly=True, lock=False)
         with self.lmdb_env.begin() as txn:
             self.n_samples = txn.stat()['entries']
 
     def __len__(self) -> int:
-        """Overridden length function.
+        """Get the size of the dataset.
 
         Returns:
-            The number of videos/samples in the original dataset.
+            The number of samples in the original dataset.
         """
         return self.n_samples
 
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, dict]:
-        """Overridden getitem function.
+        """Get an item at a specific index in the dataset.
 
-        Retrieves a specific entry in the original dataset and associated information of that entry such as words, audio, poses, etc.
+        Retrieves a specific entry in the original dataset and
+        associated information of that entry such as words, audio, poses, etc.
 
         Args:
             idx: The index of the item to retrieve.
@@ -154,9 +161,14 @@ class TrinityDataset(Dataset):
         Returns:
             A 4-Tuple:
                 word_seq_tensor: A Tensor of word vector representations.
-                pose_seq: A Tensor of pose data.
+                pose_seq: A Tensor of pose/gesture data.
                 audio: A Tensor of audio data.
-                aux_info: A dict containing information such as name, start/end frame info and start/end time.
+                aux_info: A dict containing the string keys:
+                    'vid': A string name for the information.
+                    'start_frame_no': An integer of the start index.
+                    'end_frame_no': An integer of the end index.
+                    'start_time': A float of the start time of the clip.
+                    'end_time': A float of the end time of the clip.
         """
         with self.lmdb_env.begin(write=False) as txn:
             key = '{:010}'.format(idx).encode('ascii')
@@ -186,18 +198,56 @@ class TrinityDataset(Dataset):
         return word_seq_tensor, pose_seq, audio, aux_info
 
     def set_lang_model(self, lang_model: Vocab) -> None:
-        """Set the language vector representation to be used with the dataset.
+        """Set the word vector representation to be used with the dataset.
 
-        Modifies the internal state of the object.
+        Modifies the internal state of the object at the attribute 'lang_model'.
 
         Args:
-            lang_model: A pre-trained language vector representation contained in the 'Vocab' class.
+            lang_model: A pre-trained word vector representation contained in the 'Vocab' class.
         """
         self.lang_model = lang_model
 
 class TrinityDataset_DAE(Dataset):
-    def __init__(self, args, lmdb_dir, n_poses, subdivision_stride, pose_resampling_fps, data_mean, data_std):
+    """Contains information and parameters of a (Trinity) dataset.
 
+    This is a PyTorch Dataset subclass containing information of a Trinity dataset.
+    https://trinityspeechgesture.scss.tcd.ie/data/Trinity%20Speech-Gesture%20I/GENEA_Challenge_2020_data_release/
+
+    This class is focussed on the pose/gesture data only.
+
+    Attributes:
+        lmdb_dir: A string filepath of the directory containing the actual dataset.
+        lmdb_env: A Lmdb object loaded from .mdb files in the lmdb_dir.
+        n_poses: An integer number of frames in each clip in the dataset (normally 30 (in 30 fps)).
+        subdivision_stride: An integer number of frames between the start of one clip and the start of the next clip (clips can overlap).
+        skeleton_resampling_fps: An integer frames per second of clip to use for training (usually downsampled to 20 fps, clips are normally 30 fps).
+        n_samples: An integer number of clips/entries in the original dataset.
+        lang_model: A 'Vocab' pre-trained word vector representation.
+        data_mean: A mean calculated from each video in the original dataset.
+        data_std: A standard deviation calculcated from each video.
+        all_poses: A list where each element is a dict containing string keys:
+            'original': A Tensor of each pose/gesture data.
+            'noisy': A Tensor with the same values as 'original'.
+    """
+
+    def __init__(self, args: argparse.Namespace, lmdb_dir: str, n_poses: int, subdivision_stride: int, pose_resampling_fps: int, data_mean: list[float], data_std: list[float]):
+        """Initialize with dataset location and several parameters.
+
+        The args argument must contain the following keys:
+            name: A string name of the model (ex. 'DAE' or 'autoencoder_vq').
+            rep_learning_checkpoint: If name is not 'DAE', a string filepath to a saved 'DAE' checkpoint model.
+            autoencoder_checkpoint: If sentence level is True, a string filepath to a saved VQVAE checkpoint model.
+            sentence_frame_length: An integer number of frames in each clip (for a sentence instead of gesture).
+
+        Args:
+            args: A configargparse object containing parameters (See above).
+            lmdb_dir: A string representing the filepath of the directory containing the actual dataset.
+            n_poses: An int representing the number of frames in each clip in the dataset (normally 30 (in 30 fps)).
+            subdivision_stride: An int representing the number of frames between the start of one clip and the start of the next clip (clips can overlap).
+            pose_resampling_fps: An int representing the frames per second of clip to use for training (usually downsampled to 20 fps, clips are normally 30 fps).
+            data_mean: A mean calculated from each video in the original dataset.
+            data_std: A standard deviation calculcated from each video in the original dataset.
+        """
         self.lmdb_dir = lmdb_dir
         self.n_poses = n_poses
         self.subdivision_stride = subdivision_stride
@@ -209,7 +259,6 @@ class TrinityDataset_DAE(Dataset):
         logging.info("Reading data '{}'...".format(lmdb_dir))
         preloaded_dir = lmdb_dir + '_cache'
         if not os.path.exists(preloaded_dir):
-
             data_sampler = DataPreprocessor(args, lmdb_dir, preloaded_dir, n_poses,
                                             subdivision_stride, pose_resampling_fps)
             data_sampler.run()
@@ -217,10 +266,9 @@ class TrinityDataset_DAE(Dataset):
             logging.info('Found pre-loaded samples from {}'.format(preloaded_dir))
 
         # init lmdb
-        self.lmdb_env = lmdb.open(preloaded_dir, readonly=True, lock=False)
+        self.lmdb_env: lmdb.Environment = lmdb.open(preloaded_dir, readonly=True, lock=False)
         with self.lmdb_env.begin() as txn:
             self.n_samples = txn.stat()['entries']
-
 
         # Initiate all poses
         self.all_poses = []
@@ -228,12 +276,21 @@ class TrinityDataset_DAE(Dataset):
         print("data init finished!")
 
 
-    def __len__(self):
+    def __len__(self) -> int:
+        """Get the size of the dataset.
+
+        Returns:
+            The number of samples in the dataset.
+        """
         # return 500
         # return (self.n_samples * self.n_poses) //5
         return self.n_samples
 
-    def create_all_poses(self):
+    def create_all_poses(self) -> None:
+        """Move all poses/gestures from database into object.
+
+        Modifies the internal state of the object at attribute 'all_poses'.
+        """
         with self.lmdb_env.begin(write=False) as txn:
             for i in range(self.n_samples):
                 key = '{:010}'.format(i).encode('ascii')
@@ -255,7 +312,20 @@ class TrinityDataset_DAE(Dataset):
                     self.all_poses.append({'original': original, "noisy": noisy})
 
 
-    def get_item_Memory_Efficient(self, idx):
+    def get_item_Memory_Efficient(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Get the item at a specific index in the dataset.
+
+        This method improves memory performance by returning
+        the pose/gesture data of the item only.
+
+        Args:
+            idx: An integer index of the item to get.
+
+        Returns:
+            A 2-Tuple:
+                noisy: A Tensor of pose/gesture data.
+                original: A Tensor with the same values as 'noisy'.
+        """
         idx_lmdb = idx//self.n_poses
 
         with self.lmdb_env.begin(write=False) as txn:
@@ -278,39 +348,56 @@ class TrinityDataset_DAE(Dataset):
 
             return noisy, original
 
-    def add_noise(self, x, variance_multiplier, sigma):
-        """
-               Add Gaussian noise to the data
-               Args:
-                   x                   - input vector
-                   variance_multiplier - coefficient to multiple variance of the noise on
-                   sigma               - variance of the dataset
-               Returns:
-                   x - output vector, noisy data
+    def add_noise(self, x: np.ndarray, variance_multiplier: np.ndarray, sigma: np.ndarray) -> np.ndarray:
+        """Add Gaussian noise to the input data.
+
+        The noise added is based on the variance_multiplier and sigma array values.
+
+        Args:
+            x: A numeric numpy array of data.
+            variance_multiplier: A numeric numpy array of coefficients to multiple variance of the noise on
+            sigma: A numeric numpy array of the variance of the dataset
+
+        Returns:
+            A numeric numpy array of the data with noise added.
         """
         eps = 1e-15
         noise = np.random.normal(0.0, np.multiply(sigma, variance_multiplier) + eps, x.shape)
         x = x + noise
         return x
-    def add_noise2(self, x, prob):
-        """
-               Add Gaussian noise to the data
-               Args:
-                   x                   - input vector
-                   variance_multiplier - coefficient to multiple variance of the noise on
-                   sigma               - variance of the dataset
-               Returns:
-                   x - output vector, noisy data
-        """
 
+    def add_noise2(self, x: np.ndarray, prob: float) -> np.ndarray:
+        """Add Gaussian noise to the input data.
+
+        The noise is added by zeroing the specific elements.
+
+        Args:
+            x: A numeric numpy array of data.
+            prob: A float percentage of adding noise to a single element.
+
+        Returns:
+            A numeric numpy array of the data with noise added.
+        """
         for i in range(len(x)):
             rnd = random.random()
             if (rnd < prob):
                 x[i] = 0
         return x
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Get the item at a specific index in the dataset.
 
+        This method returns the data exactly as stored. The 'noisy' data does
+        not have noise added but assumes that noise has previously been added.
+
+        Args:
+            idx: An integer index of the item to get.
+
+        Returns:
+            A 2-Tuple:
+                noisy: A Tensor of pose/gesture data (with noise).
+                original: A Tensor of pose/gesture data.
+        """
         # Keep and document for only large datasets
         # Todo: I think this way is more efficient than the prev. approach
         # I need to double check and make sure everything works as before.
@@ -327,24 +414,75 @@ class TrinityDataset_DAE(Dataset):
 
         return noisy, original
 
-    def set_lang_model(self, lang_model):
+    def set_lang_model(self, lang_model: Vocab) -> None:
+        """Set the word vector representation to be used with the dataset.
+
+        Modifies the internal state of the object at the attribute 'lang_model'.
+
+        Args:
+            lang_model: A pre-trained word vector representation contained in the 'Vocab' class.
+        """
         self.lang_model = lang_model
 
 
 class TrinityDataset_DAEed_Autoencoder(Dataset):
-    def __init__(self, args, lmdb_dir, n_poses, subdivision_stride, pose_resampling_fps, data_mean, data_std):
+    """Contains information and parameters of a (Trinity) dataset.
 
+    This is a PyTorch Dataset subclass containing information of a Trinity dataset.
+    https://trinityspeechgesture.scss.tcd.ie/data/Trinity%20Speech-Gesture%20I/GENEA_Challenge_2020_data_release/
+
+    This class is focussed on the pose/gesture data only.
+
+    Attributes:
+        lmdb_dir: A string filepath of the directory containing the actual dataset.
+        lmdb_env: A Lmdb object loaded from .mdb files in the lmdb_dir.
+        n_poses: An integer number of frames in each clip in the dataset (normally 30 (in 30 fps)).
+        subdivision_stride: An integer number of frames between the start of one clip and the start of the next clip (clips can overlap).
+        skeleton_resampling_fps: An integer frames per second of clip to use for training (usually downsampled to 20 fps, clips are normally 30 fps).
+        n_samples: An integer number of clips/entries in the original dataset.
+        lang_model: A 'Vocab' pre-trained word vector representation or None.
+        data_mean: A mean calculated from each video in the original dataset.
+        data_std: A standard deviation calculcated from each video.
+        pairwise_enabled: #TODO
+        use_derivative: #TODO
+        encoded_labeled_poses: #TODO
+        rep_learning_dim: An integer dimension of the model (unused).
+        rep_learning_checkpoint: A string filepath to saved DAE model checkpoints.
+        rep_model: A DAE neural net model loaded from the above checkpoint.
+            Models: VQ_Frame, VAE_Network, DAE_Network in DAE_model.py.
+    """
+
+    def __init__(self, args: argparse.Namespace, lmdb_dir: str, n_poses: int, subdivision_stride: int, pose_resampling_fps: int, data_mean: list[float], data_std: list[float]):
+        """Initialize with dataset location and several parameters.
+
+        The args argument must contain the following keys:
+            name: A string name of the model (ex. 'DAE' or 'autoencoder_vq').
+            rep_learning_checkpoint: If name is not 'DAE', a string filepath to a saved 'DAE' checkpoint model.
+            autoencoder_checkpoint: If sentence level is True, a string filepath to a saved VQVAE checkpoint model.
+            sentence_frame_length: An integer number of frames in each clip (for a sentence instead of gesture).
+            rep_learning_checkpoint: A string filepath to saved model checkpoints.
+            use_derivative: A boolean whether to use derivatives.
+
+        Args:
+            args: A configargparse object containing parameters (See above).
+            lmdb_dir: A string representing the filepath of the directory containing the actual dataset.
+            n_poses: An int representing the number of frames in each clip in the dataset (normally 30 (in 30 fps)).
+            subdivision_stride: An int representing the number of frames between the start of one clip and the start of the next clip (clips can overlap).
+            pose_resampling_fps: An int representing the frames per second of clip to use for training (usually downsampled to 20 fps, clips are normally 30 fps).
+            data_mean: A mean calculated from each video in the original dataset.
+            data_std: A standard deviation calculcated from each video in the original dataset.
+        """
         self.lmdb_dir = lmdb_dir
         self.n_poses = n_poses
         self.subdivision_stride = subdivision_stride
         self.skeleton_resampling_fps = pose_resampling_fps
-        self.lang_model = None
+        self.lang_model: Vocab | None = None
         self.data_mean = np.array(data_mean).squeeze()
         self.data_std = np.array(data_std).squeeze()
 
         # We will change it to true once we call the creat_similarity_dataset
-        self.pairwise_enabeled = False
-        self.use_drivitive = args.use_derivitive == 'True'
+        self.pairwise_enabled: bool = False
+        self.use_derivative: bool = args.use_derivative == 'True'
 
         logging.info("Reading data '{}'...".format(lmdb_dir))
         preloaded_dir = lmdb_dir + '_cache'
@@ -356,27 +494,42 @@ class TrinityDataset_DAEed_Autoencoder(Dataset):
             logging.info('Found pre-loaded samples from {}'.format(preloaded_dir))
 
         # init lmdb
-        self.lmdb_env = lmdb.open(preloaded_dir, readonly=True, lock=False)
+        self.lmdb_env: lmdb.Environment = lmdb.open(preloaded_dir, readonly=True, lock=False)
         with self.lmdb_env.begin() as txn:
             self.n_samples = txn.stat()['entries']
 
     #     Todo: we need to initiate pre-trained representation learning model
-        checkpoint_path = args.rep_learning_checkpoint
-        self.rep_learning_dim = args.rep_learning_dim
+        checkpoint_path: str = args.rep_learning_checkpoint
+        self.rep_learning_dim: int = args.rep_learning_dim
         rep_learning_args, rep_model, rep_loss_fn, rep_lang_model, rep_out_dim = utils.train_utils.load_checkpoint_and_model(
             checkpoint_path, device, 'DAE')
-        self.rep_model = rep_model.to('cpu')
+        self.rep_model: torch.nn.Module = rep_model.to('cpu')
         self.rep_model.train(False)
 
-    def __len__(self):
+    def __len__(self) -> int:
+        """Get the floor size of the dataset divided by 10.
+
+        Returns:
+            The floor integer of samples divided by 10 in the dataset.
+        """
         return self.n_samples//10
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Get the item at a specific index in the dataset.
+
+        Args:
+            idx: An integer index of the item to get.
+
+        Returns:
+            A 2-Tuple:
+                encoded_poses: A Tensor of pose/gesture data.
+                encoded_poses: The same tensor as above.
+        """
         with self.lmdb_env.begin(write=False) as txn:
             key = '{:010}'.format(idx).encode('ascii')
             sample = txn.get(key)
 
-            sample = pyarrow.deserialize(sample)
+            sample: Tuple[np.ndarray, np.ndarray, np.ndarray, dict] = pyarrow.deserialize(sample)
             word_seq, pose_seq, audio, aux_info = sample
 
         # normalize
@@ -393,7 +546,7 @@ class TrinityDataset_DAEed_Autoencoder(Dataset):
             if self.rep_model.encoder == None: #for ablation study
                 encoded_poses = target
             else:
-                encoded_poses = self.rep_model.encoder(target)
+                encoded_poses: torch.Tensor = self.rep_model.encoder(target)
 
         # encoded_poses = torch.squeeze(encoded_poses, 2)
         # encoded_poses = encoded_poses.to('cpu')
@@ -406,7 +559,7 @@ class TrinityDataset_DAEed_Autoencoder(Dataset):
         # audio = torch.from_numpy(audio).float()
 
 
-        if self.use_drivitive:
+        if self.use_derivative:
             diff =  [(encoded_poses[n, :] - encoded_poses[n - 1, :]) for n in range(1, encoded_poses.shape[0])]
             diff.insert(0,torch.zeros_like(encoded_poses[0, :]))
             encoded_poses = torch.hstack((encoded_poses, torch.stack(diff)))
@@ -415,7 +568,9 @@ class TrinityDataset_DAEed_Autoencoder(Dataset):
         return encoded_poses, encoded_poses
 
 
-    def creat_similarity_dataset(self, pickle_file, labelstxt_file):
+    def create_similarity_dataset(self, pickle_file: str, labelstxt_file: str) -> None:
+        """TODO
+        """
         # Todo: 1. Thos function gets the pickle file that I made in the clustering.py(or flowgmm) process as well
         # Todo: as the labels text file that I annotated in the Unity application.
         # Todo: 2. Then I will creat those pairs of similarity and dissimilarity
@@ -435,16 +590,18 @@ class TrinityDataset_DAEed_Autoencoder(Dataset):
         # target = target.to(device)
         with torch.no_grad():
             self.encoded_labeled_poses = self.rep_model.encoder(target)
-            if self.use_drivitive:
+            if self.use_derivative:
                 diff = [(self.encoded_labeled_poses[n, :] - self.encoded_labeled_poses[n - 1, :])
                         for n in range(1, self.encoded_labeled_poses.shape[0])]
                 diff.insert(0, torch.zeros_like(self.encoded_labeled_poses[0, :]))
                 self.encoded_labeled_poses = torch.cat((self.encoded_labeled_poses, torch.stack(diff)), dim=2)
-        self.pairwise_enabeled = True
+        self.pairwise_enabled = True
         pass
 
 
-    def get_labeled_(self, count):
+    def get_labeled_(self, count: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """TODO
+        """
         stack_pairs1 = torch.zeros(count, self.encoded_labeled_poses.shape[1], self.encoded_labeled_poses.shape[2])
         stack_pairs2 = torch.zeros(count, self.encoded_labeled_poses.shape[1], self.encoded_labeled_poses.shape[2])
         stack_labels = torch.zeros(count)
@@ -463,11 +620,19 @@ class TrinityDataset_DAEed_Autoencoder(Dataset):
 
         return stack_pairs1, stack_pairs2, stack_labels
 
-    def set_lang_model(self, lang_model):
+    def set_lang_model(self, lang_model: Vocab) -> None:
+        """Set the word vector representation to be used with the dataset.
+
+        Modifies the internal state of the object at the attribute 'lang_model'.
+
+        Args:
+            lang_model: A pre-trained word vector representation contained in the 'Vocab' class.
+        """
         self.lang_model = lang_model
 
-    def load_gesture_data(self, pre_processed_pickle_adress, labelstxt_file):
-
+    def load_gesture_data(self, pre_processed_pickle_adress: str, labelstxt_file: str) -> Tuple[np.ndarray, np.ndarray, list, list]:
+        """TODO
+        """
         loaded = pickle.load(open(pre_processed_pickle_adress, 'rb'))
         liaded_len = len(loaded)
         loaded = np.hstack(loaded)
@@ -557,7 +722,7 @@ class TrinityDataset_with_cluster(Dataset):
         self.lang_model = None
         self.data_mean = np.array(data_mean).squeeze()
         self.data_std = np.array(data_std).squeeze()
-        self.use_drivitive = args.use_derivitive == 'True'
+        self.use_derivative = args.use_derivative == 'True'
         self.kmeanmodel = pickle.load(open('../output/clustering_results/kmeans_model.pk','rb'))
 
         if args.sentence_level == 'True':
@@ -634,7 +799,7 @@ class TrinityDataset_with_cluster(Dataset):
 
         encoded_poses = encoded_poses.reshape((encoded_poses.shape[0], -1)).float()
 
-        if self.use_drivitive:
+        if self.use_derivative:
             diff = [(encoded_poses[n, :] - encoded_poses[n - 1, :]) for n in range(1, encoded_poses.shape[0])]
             diff.insert(0, torch.zeros_like(encoded_poses[0, :]))
             encoded_poses = torch.hstack((encoded_poses, torch.stack(diff)))
@@ -671,7 +836,7 @@ class TrinityDataset_sentencelevel(Dataset):
         self.lang_model = None
         self.data_mean = np.array(data_mean).squeeze()
         self.data_std = np.array(data_std).squeeze()
-        self.use_drivitive = args.use_derivitive == 'True'
+        self.use_derivative = args.use_derivative == 'True'
 
         # Todo: fix adress -- Fixed
         test = os.path.dirname(args.autoencoder_checkpoint)
