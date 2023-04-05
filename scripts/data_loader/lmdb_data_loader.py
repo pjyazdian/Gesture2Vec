@@ -17,6 +17,7 @@ from torch.utils.data.dataloader import default_collate
 from data_loader.data_preprocessor import DataPreprocessor
 import pyarrow
 from configargparse import argparse
+from sklearn.cluster import DBSCAN, KMeans, AgglomerativeClustering
 
 from model.vocab import Vocab
 import utils
@@ -431,7 +432,7 @@ class TrinityDataset_DAEed_Autoencoder(Dataset):
     This is a PyTorch Dataset subclass containing information of a Trinity dataset.
     https://trinityspeechgesture.scss.tcd.ie/data/Trinity%20Speech-Gesture%20I/GENEA_Challenge_2020_data_release/
 
-    This class is focussed on the pose/gesture data only.
+    This class is #TODO.
 
     Attributes:
         lmdb_dir: A string filepath of the directory containing the actual dataset.
@@ -713,6 +714,32 @@ class TrinityDataset_DAEed_Autoencoder(Dataset):
 
 
 class TrinityDataset_with_cluster(Dataset):
+    """Contains information and parameters of a (Trinity) dataset.
+
+    This is a PyTorch Dataset subclass containing information of a Trinity dataset.
+    https://trinityspeechgesture.scss.tcd.ie/data/Trinity%20Speech-Gesture%20I/GENEA_Challenge_2020_data_release/
+
+    This class is #TODO
+
+    Attributes:
+        lmdb_dir: A string filepath of the directory containing the actual dataset.
+        lmdb_env: A Lmdb object loaded from .mdb files in the lmdb_dir.
+        n_poses: An integer number of frames in each clip in the dataset (normally 30 (in 30 fps)).
+        subdivision_stride: An integer number of frames between the start of one clip and the start of the next clip (clips can overlap).
+        skeleton_resampling_fps: An integer frames per second of clip to use for training (usually downsampled to 20 fps, clips are normally 30 fps).
+        n_samples: An integer number of clips/entries in the original dataset.
+        lang_model: A 'Vocab' pre-trained word vector representation or None.
+        data_mean: A mean calculated from each video in the original dataset.
+        data_std: A standard deviation calculcated from each video.
+        pairwise_enabled: #TODO
+        use_derivative: #TODO
+        encoded_labeled_poses: #TODO
+        sentence_level: #TODO
+        RNNautoencoder_model: #TODO
+        rep_learning_dim: An integer dimension of the model (unused).
+        rep_model: A DAE neural net model loaded from the above checkpoint.
+            Models: VQ_Frame, VAE_Network, DAE_Network in DAE_model.py.
+    """
     def __init__(self, args, lmdb_dir, n_poses, subdivision_stride, pose_resampling_fps, data_mean, data_std):
 
         self.lmdb_dir = lmdb_dir
@@ -723,7 +750,7 @@ class TrinityDataset_with_cluster(Dataset):
         self.data_mean = np.array(data_mean).squeeze()
         self.data_std = np.array(data_std).squeeze()
         self.use_derivative = args.use_derivative == 'True'
-        self.kmeanmodel = pickle.load(open('../output/clustering_results/kmeans_model.pk','rb'))
+        self.kmeanmodel: DBSCAN | KMeans | AgglomerativeClustering = pickle.load(open('../output/clustering_results/kmeans_model.pk','rb'))
 
         if args.sentence_level == 'True':
             self.sentence_level = True
@@ -744,19 +771,19 @@ class TrinityDataset_with_cluster(Dataset):
             logging.info('Found pre-loaded samples from {}'.format(preloaded_dir))
 
         # init lmdb
-        self.lmdb_env = lmdb.open(preloaded_dir, readonly=True, lock=False)
+        self.lmdb_env: lmdb.Environment = lmdb.open(preloaded_dir, readonly=True, lock=False)
         with self.lmdb_env.begin() as txn:
             self.n_samples = txn.stat()['entries']
 
         # Representation model
-        checkpoint_path = args.rep_learning_checkpoint
-        self.rep_learning_dim = args.rep_learning_dim
+        checkpoint_path: str = args.rep_learning_checkpoint
+        self.rep_learning_dim: int = args.rep_learning_dim
         rep_learning_args, rep_model, rep_loss_fn, rep_lang_model, rep_out_dim = utils.train_utils.load_checkpoint_and_model(
             checkpoint_path, device, 'DAE')
-        self.rep_model = rep_model.to('cpu')
+        self.rep_model: torch.nn.Module = rep_model.to('cpu')
         self.rep_model.train(False)
         #   RNN autoencoder
-        checkpoint_path = args.autoencoder_checkpoint
+        checkpoint_path: str = args.autoencoder_checkpoint
 
         # RNNAutoencoder_args, RNNAutoencoder_model, RNNAutoencoder_fn,\
         # RNNAutoencoder_model, RNNAutoencoder_dim = utils.train_utils.load_checkpoint_and_model(
@@ -764,13 +791,20 @@ class TrinityDataset_with_cluster(Dataset):
 
         args, rnn, loss_fn, lang_model, out_dim = utils.train_utils.load_checkpoint_and_model(
             checkpoint_path, device, 'autoencoder')
-        self.RNNAutoencoder_model = rnn.to('cpu')
+        self.RNNAutoencoder_model: torch.nn.Module = rnn.to('cpu')
         self.RNNAutoencoder_model.train(False)
 
-    def __len__(self):
+    def __len__(self) -> int:
+        """Get the size of the dataset.
+
+        Returns:
+            The number of samples in the dataset.
+        """
         return self.n_samples
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, dict, torch.Tensor]:
+        """TODO
+        """
         with self.lmdb_env.begin(write=False) as txn:
             key = '{:010}'.format(idx).encode('ascii')
             sample = txn.get(key)
@@ -778,7 +812,7 @@ class TrinityDataset_with_cluster(Dataset):
             sample = pyarrow.deserialize(sample)
             word_seq, pose_seq, audio, aux_info, portion = sample
 
-        def words_to_tensor(lang, words, end_time=None):
+        def words_to_tensor(lang: Vocab | None, words: list[list], end_time: float | None =None):
             indexes = [lang.SOS_token]
             for word in words:
                 if end_time is not None and word[1] > end_time:
@@ -820,13 +854,47 @@ class TrinityDataset_with_cluster(Dataset):
         # return cluster_id
         return word_seq_tensor, encoded_poses, audio, aux_info, cluster_id
 
-    def set_lang_model(self, lang_model):
+    def set_lang_model(self, lang_model: Vocab) -> None:
+        """Set the word vector representation to be used with the dataset.
+
+        Modifies the internal state of the object at the attribute 'lang_model'.
+
+        Args:
+            lang_model: A pre-trained word vector representation contained in the 'Vocab' class.
+        """
         self.lang_model = lang_model
 
 
 class TrinityDataset_sentencelevel(Dataset):
-    def __init__(self, args, lmdb_dir, n_poses, subdivision_stride, pose_resampling_fps, data_mean, data_std):
+    """Contains information and parameters of a (Trinity) dataset.
 
+    This is a PyTorch Dataset subclass containing information of a Trinity dataset.
+    https://trinityspeechgesture.scss.tcd.ie/data/Trinity%20Speech-Gesture%20I/GENEA_Challenge_2020_data_release/
+
+    This class is #TODO.
+
+    Attributes:
+        lmdb_dir: A string filepath of the directory containing the actual dataset.
+        lmdb_env: A Lmdb object loaded from .mdb files in the lmdb_dir.
+        n_poses: An integer number of frames in each clip in the dataset (normally 30 (in 30 fps)).
+        subdivision_stride: An integer number of frames between the start of one clip and the start of the next clip (clips can overlap).
+        skeleton_resampling_fps: An integer frames per second of clip to use for training (usually downsampled to 20 fps, clips are normally 30 fps).
+        n_samples: An integer number of clips/entries in the original dataset.
+        lang_model: A 'Vocab' pre-trained word vector representation or None.
+        data_mean: A mean calculated from each video in the original dataset.
+        data_std: A standard deviation calculcated from each video.
+        args: #TODO
+        kmeanmodel: #TODO
+        sentence_level: #TODO
+        RNNAutoencoder_model: #TODO
+        use_derivative: #TODO
+        rep_learning_dim: An integer dimension of the model (unused).
+        rep_model: A DAE neural net model loaded from the above checkpoint.
+            Models: VQ_Frame, VAE_Network, DAE_Network in DAE_model.py.
+    """
+    def __init__(self, args: argparse.Namespace, lmdb_dir: str, n_poses: int, subdivision_stride: int, pose_resampling_fps: int, data_mean: list[float], data_std: list[float]):
+        """
+        """
         self.lmdb_dir = lmdb_dir
         self.n_poses = n_poses
         self.subdivision_stride = subdivision_stride
@@ -881,19 +949,19 @@ class TrinityDataset_sentencelevel(Dataset):
 
 
         # init lmdb
-        self.lmdb_env = lmdb.open(preloaded_dir, readonly=True, lock=False)
+        self.lmdb_env: lmdb.Environment = lmdb.open(preloaded_dir, readonly=True, lock=False)
         with self.lmdb_env.begin() as txn:
             self.n_samples = txn.stat()['entries']
 
         # Representation model
-        checkpoint_path = args.rep_learning_checkpoint
-        self.rep_learning_dim = args.rep_learning_dim
+        checkpoint_path: str = args.rep_learning_checkpoint
+        self.rep_learning_dim: int = args.rep_learning_dim
         rep_learning_args, rep_model, rep_loss_fn, rep_lang_model, rep_out_dim = utils.train_utils.load_checkpoint_and_model(
             checkpoint_path, device, 'DAE')
         self.rep_model = rep_model.to('cpu')
         self.rep_model.train(False)
         #   RNN autoencoder
-        checkpoint_path = args.autoencoder_checkpoint
+        checkpoint_path:str = args.autoencoder_checkpoint
 
         # RNNAutoencoder_args, RNNAutoencoder_model, RNNAutoencoder_fn,\
         # RNNAutoencoder_model, RNNAutoencoder_dim = utils.train_utils.load_checkpoint_and_model(
@@ -901,14 +969,21 @@ class TrinityDataset_sentencelevel(Dataset):
 
         args_rnn, rnn, loss_fn, lang_model, out_dim = utils.train_utils.load_checkpoint_and_model(
             checkpoint_path, device, 'autoencoder_vq')
-        self.RNNAutoencoder_model = rnn.to('cpu')
+        self.RNNAutoencoder_model: torch.nn.Module = rnn.to('cpu')
         self.RNNAutoencoder_model.train(False)
 
 
-    def __len__(self):
+    def __len__(self) -> int:
+        """Get the size of the dataset.
+
+        Returns:
+            The number of samples in the dataset.
+        """
         return self.n_samples
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, dict, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """TODO
+        """
         with self.lmdb_env.begin(write=False) as txn:
             key = '{:010}'.format(idx).encode('ascii')
             sample = txn.get(key)
@@ -916,7 +991,7 @@ class TrinityDataset_sentencelevel(Dataset):
             sample = pyarrow.deserialize(sample)
             word_seq, pose_seq, audio_raws, audio_mels, aux_info, sentence_leve_latents, GP3_Embedding = sample
 
-        def words_to_tensor(lang, words, end_time=None):
+        def words_to_tensor(lang: Vocab | None, words: list[list], end_time: float | None = None) -> torch.Tensor:
             # indexes = [lang.SOS_token]
             indexes = []
             if len(words)<=0:
@@ -990,5 +1065,12 @@ class TrinityDataset_sentencelevel(Dataset):
 
         return word_seq_tensor, pose_seq, audio, aux_info, sentence_leve_latents, cluster_ids, GP3_Embedding
 
-    def set_lang_model(self, lang_model):
+    def set_lang_model(self, lang_model: Vocab) -> None:
+        """Set the word vector representation to be used with the dataset.
+
+        Modifies the internal state of the object at the attribute 'lang_model'.
+
+        Args:
+            lang_model: A pre-trained word vector representation contained in the 'Vocab' class.
+        """
         self.lang_model = lang_model

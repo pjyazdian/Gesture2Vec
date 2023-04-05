@@ -123,15 +123,22 @@ class DataPreprocessor:
     def _sample_from_clip(self, vid: str, clip: dict) -> None:
         """Internal function to extract and write skeleton, audio and word data from provided clip.
 
-        Modifies internal state of the object (n_out_samples, n_poses, audio_sample_length is incremented).
+        Modifies internal state of the object (n_out_samples, n_poses, audio_sample_length).
+        #TODO
 
         Args:
             vid: A string representing the name or id of the clip.
-            clip: A dictionary containing all the data of the clip including poses, audio and words at each timestamp.
+            clip: A dictionary containing the following string keys:
+                'poses': A Numpy array of pose/gesture data.
+                'audio_raw': A Numpy array of audio data.
+                'words': A list of lists. Each internal list contains 3 elements:
+                    index 0: A float start time.
+                    index 1: A float end time.
+                    index 2: A string word.
         """
-        clip_skeleton = clip['poses']
-        clip_audio_raw = clip['audio_raw']
-        clip_word_list = clip['words']
+        clip_skeleton: np.ndarray = clip['poses']
+        clip_audio_raw: np.ndarray = clip['audio_raw']
+        clip_word_list: list[list] = clip['words']
 
         # divide
         aux_info = []
