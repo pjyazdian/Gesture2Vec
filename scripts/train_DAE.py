@@ -1,4 +1,4 @@
-"""This script runs the training and testing of the neural net.
+"""This script runs the training of Part a: Pose Representation Learning.
 
 The following parameters must be contained in the config file:
     epochs: The integer number of epochs to train for.
@@ -10,6 +10,7 @@ The following parameters must be contained in the config file:
     random_seed: A integer to use as a random seed for consistency.
     learning_rate: A float learning rate to use during training.
     autoencoder_vq_components: An integer size for the Embedding size in VQVAE if 'autoencoder_vq' is True.
+    input_motion_dim: An integer of the dimensions of the input motion data.
 
 Typical usage example:
     python train_DAE.py --config=<CONFIG_FILE>
@@ -17,7 +18,7 @@ Typical usage example:
 Note: CONFIG_FILE is the path containing the config file (ex. config/DAE.yml).
 """
 
-
+from __future__ import annotations
 import os
 import pprint
 import random
@@ -68,7 +69,7 @@ def init_model(
 ) -> Tuple[torch.nn.Module, torch.nn.MSELoss]:
     """Initializes a specified model.
 
-    The model initialized depends on the config file values.
+    The model initialized depends on the config file values (stored in args).
     The values checked (in order) are:
         - autoencoder_vq == 'True' returns a 'VQ_Frame' model.
             - This option requires the following values in the config file:
@@ -81,6 +82,7 @@ def init_model(
         - Otherwise returns a 'DAE_Network'.
             - This option requires the following values in the config file:
                 - hidden_size (int)
+    The size of the input data dimension must also be provided as 'input_motion_dim'
 
     Args:
         args: A configargparse object containing the needed config values.
@@ -93,11 +95,9 @@ def init_model(
             network: A custom PyTorch neural net. See above for options.
             loss_fn: A PyTorch loss object (MSELoss).
     """
-    n_frames = args.n_poses
-    # generator = Seq2SeqNet(args, pose_dim, n_frames, lang_model.n_words, args.wordembed_dim,
-    #                        lang_model.word_embedding_weights).to(_device)
-    motion_dim = 162  # 162 #135
-    # try:
+    motion_dim = (
+        args.input_motion_dim
+    )  # Trinity dataset is 135 = 15 Joints * 3*3 Rotational Matrix
     if args.autoencoder_vq == "True":
         network = VQ_Frame(
             motion_dim,
@@ -127,8 +127,8 @@ def train_epochs(
 
     The training checkpoints are at every 20 epochs.
     The optimizer used is Adam.
-    If a VQVAE model is selected, the 'Use_Tricks' boolean flag can be manually
-    changed to use shortcuts #TODO.
+    If a VQVAE model is selected, the 'Use_Tricks' boolean flag can be
+    (manually) changed to optimize the training of the VQVAE model.
     The loss values during training and testing are appended to the global
     variables 'Global_loss_train' and 'Global_loss_eval' and can be accessed
     through those global variables.
@@ -202,8 +202,9 @@ def train_epochs(
 
         # evaluate the test set
         # val_metrics = evaluate_testset(test_data_loader, generator, loss_fn, args)
-        val_metrics = 0.01
+        val_metrics = 0.01  # TODO
         Global_loss_eval.append(val_metrics)
+
         # save model
         if epoch % save_model_epoch_interval == 0 and epoch > 0:
             try:  # multi gpu
@@ -256,18 +257,14 @@ def train_epochs(
                     n_clusters=generator.vq_components, max_iter=2500, random_state=0
                 ).fit(normalized_data)
                 print("Kmeans trained!")
-                # print("km",km.cluster_centers_.shape)
-                # print("Embeddings", generator.vq_layer._embedding.weight.shape)
                 generator.vq_layer._embedding.weight.data = torch.tensor(
                     km.cluster_centers_
                 ).to(device)
-                # exit()
 
         # train iter
         iter_start_time = time.time()
         for iter_idx, data in enumerate(train_data_loader, 0):
             global_iter += 1
-            # in_text, text_lengths, target_vec, in_audio, aux_info = data
             noisy, original = data
             batch_size = original.size(0)
 
@@ -281,12 +278,9 @@ def train_epochs(
                 )
                 train_res_recon_error.append(loss["loss"])
                 train_res_perplexity.append(perplexity.item())
-            # if Train_Deoising:
             loss = train_iter_DAE(
                 args, epoch, noisy, original, generator, gen_optimizer
             )
-            # else:
-            #     loss = train_iter_DAE(args, epoch, original, original, generator, gen_optimizer)
 
             # loss values
             for loss_meter in loss_meters:
@@ -314,7 +308,6 @@ def train_epochs(
 
             iter_start_time = time.time()
     print("___________")
-    # print(Global_loss_train)
 
 
 def evaluate_testset(
@@ -346,7 +339,6 @@ def evaluate_testset(
 
     with torch.no_grad():
         for iter_idx, data in enumerate(test_data_loader, 0):
-            # in_text, text_lengths, target_vec, in_audio, aux_info = data
             noisy, original = data
             batch_size = original.size(0)
 
@@ -362,7 +354,7 @@ def evaluate_testset(
             else:
                 out_poses = generator(noisy)
 
-            # This one is for GSOFT VQ
+            # This one is for GSOFT VQ #TODO
             # loss = out_poses.log_prob(original).sum(dim=1).mean()
             loss = loss_fn(out_poses, original)
 
@@ -413,11 +405,9 @@ def main(
             second: The float value of the last testing loss.
     """
     args: argparse.Namespace = config["args"]
-    args.hidden_size = H
-    # ssssssssssssssssssssssssssssssssssssssssssssssssssssargs.autoencoder_vq_components = vq_ncomponent
+    args.hidden_size = H  # TODO: this is already in config, why override?
     if args.autoencoder_vq == "True":  # ths was for training a lot of networks
         args.model_save_path += "/" + str(vq_ncomponent)
-    # args.epochs = 20
     args.model_save_path += "/train_DAE_H" + str(H)
     trial_id = None
 
@@ -438,19 +428,16 @@ def main(
     logging.info("CUDA version: {}".format(torch.version.cuda))
     logging.info(pprint.pformat(vars(args)))
 
-    # Dataset moved from here.
-
     global Global_loss_train
     Global_loss_train = {"loss": [], "var_loss": []}
     global Global_loss_eval
     Global_loss_eval = []
+
     # train
     train_epochs(
         args, train_loader, test_loader, lang_model, pose_dim=15 * 9, trial_id=trial_id
     )
 
-    # print("****************")
-    # print(Global_loss_eval)
     dict2save = {"Global_train": Global_loss_train, "Global_eval": Global_loss_eval}
     pickle.dump(dict2save, open(args.model_save_path + "/globals.pk", "wb"))
 
@@ -460,7 +447,6 @@ def main(
         )
     except:
         pass
-    # plt.plot(Global_loss_train)
 
     return Global_loss_train["loss"][-1], Global_loss_eval[-1]
 
@@ -528,21 +514,17 @@ def plot_embedding(
         normalized_data = priciple_components.transform(w)
     else:
         normalized_data = w
-    # TSNE
 
+    # TSNE
     MyTSNE = TSNE(
         n_components=2, perplexity=30, metric="euclidean", n_jobs=8, verbose=True
     )
     X_embedded = MyTSNE.fit(normalized_data)
 
     plt.figure(figsize=(16, 10))
-    # palette = sns.color_palette("bright", k_component)
-    # 2D
-
     sns.scatterplot(
         X_embedded[:, 0],
         X_embedded[:, 1],
-        # hue=labels_,
         legend=False,
     )
     plt.title("Embedding visualization" + str(epoch_num))
@@ -559,14 +541,11 @@ def plot_embedding(
         train_res_recon_error_smooth = savgol_filter(train_res_recon_error, 201, 7)
         train_res_perplexity_smooth = savgol_filter(train_res_perplexity, 201, 7)
     except:
-        train_res_recon_error_smooth = (
-            train_res_recon_error  # savgol_filter(train_res_recon_error, 201, 7)
-        )
-        train_res_perplexity_smooth = (
-            train_res_perplexity  # [0] #savgol_filter(train_res_perplexity, 201, 7)
-        )
+        train_res_recon_error_smooth = train_res_recon_error
+        train_res_perplexity_smooth = train_res_perplexity
 
     f = plt.figure(figsize=(16, 8))
+
     ax = f.add_subplot(1, 2, 1)
     ax.plot(train_res_recon_error_smooth)
     ax.set_yscale("log")
@@ -588,7 +567,6 @@ def plot_embedding(
 
 
 if __name__ == "__main__":
-    # --config=../config/seq2seq.yml
     _args = parse_args()
     # dataset
     args = _args
@@ -607,8 +585,7 @@ if __name__ == "__main__":
         shuffle=True,
         drop_last=True,
         num_workers=args.loader_workers,
-        pin_memory=True
-        # collate_fn=word_seq_collate_fn
+        pin_memory=True,
     )
 
     val_dataset = TrinityDataset_DAE(
@@ -626,8 +603,7 @@ if __name__ == "__main__":
         shuffle=False,
         drop_last=True,
         num_workers=args.loader_workers,
-        pin_memory=True
-        # collate_fn=word_seq_collate_fn
+        pin_memory=True,
     )
 
     # build vocab
@@ -650,7 +626,8 @@ if __name__ == "__main__":
     backupsv = _args.model_save_path
     # This range can be used to test various latent code space sizes.
     # Best value appears to be 40.
-    for k in range(45, 46, 1):
+    # TODO: in config file already?
+    for k in range(40, 41, 1):
         print("*******************************************************************")
         print("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
         print("k=" + str(k))
@@ -669,7 +646,7 @@ if __name__ == "__main__":
         command = "python inference_DAE.py " + save_name
         os.system(command)
 
-    #     Plot results
+    # Plot results
     plt.plot(dim_lost, train_loss_list, label="Train loss")
     plt.plot(dim_lost, eval_loss_list, label="Evaluation loss")
 
@@ -679,15 +656,7 @@ if __name__ == "__main__":
     plt.ylabel("Loss Average")
     # Give a title to the graph
     plt.title("Training/Evaluation Loss based on latent dim")
-
     # Show a legend on the plot
     plt.legend()
-
     plt.savefig(backupsv + "/overall.png")
-    # plt.savefig(os.path.join(args.model_save_path, 'loss_plot.png'))
     plt.show()
-
-    """
-    main({'args': _args}, train_loader, test_loader, lang_model, 150, #-2 #-1,
-             vq_ncomponent=args.autoencoder_vq_components)
-    """
