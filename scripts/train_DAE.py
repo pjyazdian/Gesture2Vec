@@ -1,4 +1,4 @@
-"""This script runs the training of Part a: Pose Representation Learning.
+"""This module runs the training of Part a: Pose Representation Learning.
 
 The following parameters must be contained in the config file:
     epochs: The integer number of epochs to train for.
@@ -39,6 +39,8 @@ from torch.utils.data import DataLoader
 from torch import optim
 from configargparse import argparse
 
+[sys.path.append(i) for i in [".", ".."]]
+
 from config.parse_args import parse_args
 from data_loader.lmdb_data_loader import *
 from train_eval.train_seq2seq import train_iter_DAE
@@ -47,8 +49,6 @@ from utils.average_meter import AverageMeter
 from utils.vocab_utils import build_vocab
 from model.DAE_model import DAE_Network, VQ_Frame, VAE_Network
 from model.vocab import Vocab
-
-[sys.path.append(i) for i in [".", ".."]]
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
