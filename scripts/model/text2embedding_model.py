@@ -24,7 +24,17 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 class EncoderRNN(nn.Module):
-    """ """
+    """Custom RNN Encoder subclass.
+
+    Attributes:
+        input_size: The integer size of the input data.
+        hidden_size: The integer size of the hidden layer in a Linear layer.
+        n_layers: The integer size of GRU output layers.
+        dropout: The float probability for adding noise to data.
+        in_layer: A PyTorch Linear layer.
+        gru: A PyTorch GRU layer.
+        do_flatten_parameters: A boolean to flatten if GPU is available.
+    """
 
     def __init__(
         self,
@@ -35,7 +45,15 @@ class EncoderRNN(nn.Module):
         dropout: float = 0.5,
         pre_trained_embedding: np.ndarray = None,
     ):
-        """ """
+        """Initialize with input/hidden sizes, number of grus, dropout prob.
+
+        Args:
+            input_size: An integer size of the input data.
+            hidden_size: An integer size of the hidden layer in a Linear layer.
+            n_layers: An integer for the layers in GRU output size (default 1).
+            dropout: A float probability for adding noise to data (default 50%).
+            pre_trained_embedding: A word vector representation or None.
+        """
         super(EncoderRNN, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
@@ -43,9 +61,8 @@ class EncoderRNN(nn.Module):
         self.n_layers = n_layers
         self.dropout = dropout
 
-        if (
-            pre_trained_embedding is not None
-        ):  # use pre-trained embedding (e.g., word2vec, glove)
+        # use pre-trained embedding (e.g., word2vec, glove)
+        if pre_trained_embedding is not None:
             assert pre_trained_embedding.shape[0] == input_size
             assert pre_trained_embedding.shape[1] == embed_size
             self.embedding = nn.Embedding.from_pretrained(
@@ -68,16 +85,18 @@ class EncoderRNN(nn.Module):
         input_lengths: torch.Tensor,
         hidden: torch.Tensor | None = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        :param input_seqs:
-            Variable of shape (num_step(T),batch_size(B)), sorted decreasingly by lengths(for packing)
-        :param input_lengths:
-            list of sequence length
-        :param hidden:
-            initial state of GRU
-        :returns:
-            GRU outputs in shape (T,B,hidden_size(H))
-            last hidden stat of RNN(i.e. last output for GRU)
+        """Forward pass with input data tensor and hidden state tensor.
+
+        Args:
+            input_seqs: Tensor with shape (num_step(T),batch_size(B)),
+                        sorted decreasingly by lengths (for packing).
+            input_seqs: A Tensor of sequence data to pass through.
+            hidden: A Tensor of the initial state of GRU.
+
+        Returns:
+            A 2-Tuple:
+                outputs: GRU outputs in shape (T,B,hidden_size(H))
+                hidden: last hidden stat of RNN(i.e. last output for GRU)
         """
         if self.do_flatten_parameters:
             self.gru.flatten_parameters()
@@ -95,10 +114,20 @@ class EncoderRNN(nn.Module):
 
 
 class Attn(nn.Module):
-    """ """
+    """Attention layer for scoring.
+
+    Attributes:
+        hidden_size: The integer size of the output (input is 2x this size).
+        attn: A PyTorch Linear layer.
+        v: A Tensor that can be the internal state at a specific point in time.
+    """
 
     def __init__(self, hidden_size: int):
-        """ """
+        """Initialize with the size of the hidden layer.
+
+        Args:
+            hidden_size: The interger size of the hidden layer.
+        """
         super(Attn, self).__init__()
         self.hidden_size = hidden_size
         self.attn = nn.Linear(self.hidden_size * 2, hidden_size)
@@ -109,13 +138,15 @@ class Attn(nn.Module):
     def forward(
         self, hidden: torch.Tensor, encoder_outputs: torch.Tensor
     ) -> torch.Tensor:
-        """
-        :param hidden:
-            previous hidden state of the decoder, in shape (layers*directions,B,H)
-        :param encoder_outputs:
-            encoder outputs from Encoder, in shape (T,B,H)
-        :return
-            attention energies in shape (B,T)
+        """Forward pass with the hidden weights and encoder output.
+
+        Args:
+            hidden: A Tensor of the previous hidden state of the decoder,
+                    in shape (layers*directions,B,H).
+            encoder_outputs: A Tensor of output from Encoder, in shape (T,B,H).
+
+        Returns:
+            A Tensor with attention energies in shape (B,T).
         """
         max_len = encoder_outputs.size(0)
         this_batch_size = encoder_outputs.size(1)
@@ -127,6 +158,15 @@ class Attn(nn.Module):
     def score(
         self, hidden: torch.Tensor, encoder_outputs: torch.Tensor
     ) -> torch.Tensor:
+        """Calculates energy score between 2 matrices (previous/current state).
+
+        Args:
+            hidden: A Tensor of the hidden state.
+            encoder_outputs: A Tensor of output from encoder.
+
+        Returns:
+            A Tensor with the energy score.
+        """
         energy = torch.tanh(
             self.attn(torch.cat([hidden, encoder_outputs], 2))
         )  # [B*T*2H]->[B*T*H]
@@ -137,7 +177,21 @@ class Attn(nn.Module):
 
 
 class BahdanauAttnDecoderRNN(nn.Module):
-    """ """
+    """Custom Decoder RNN class.
+
+    Attributes:
+        hidden_size: The integer size of the output of the hidden layer.
+        output_size: The integer size of the output of the output layer.
+        n_layers: An integer number of recurrent gru units.
+        dropout_p: A float probability of adding noise in a dropout layer.
+        embedding: A PyTorch Embedding lookup table for word vectors.
+        dropout: A PyTorch Dropout layer with 'dropout_p' as the probability.
+        pre_linear: A Linear layer with a BatchNorm1d and ReLU activation.
+        attn: A custom 'Attn' object for calculating attention scores.
+        gru: A PyTorch GRU RNN.
+        out: A Linear layer applied to the gru output.
+        do_flatten_parameters: A boolean to flatten if a GPU is available.
+    """
 
     def __init__(
         self,
@@ -150,7 +204,22 @@ class BahdanauAttnDecoderRNN(nn.Module):
         discrete_representation: bool = False,
         speaker_model=None,
     ):
-        """ """
+        """Initialize with multiple parameters.
+
+        The 'args' argument must have the following keys:
+            autoencoder_conditioned: A string boolean to use zeroes or dropout.
+            autoencoder_att: A string boolean to track 'Attn' scoring.
+            autoencoder_fixed_weight: A string boolean to calculate gradients.
+
+        Args:
+            input_size: The integer size of input data.
+            hidden_size: The integer size of the output of the hidden layer.
+            output_size: The integer size of the output of the output layer.
+            n_layers: A integer number of hidden layers.
+            dropout_p: A float probability of adding noise in a dropout layer.
+            discrete_representation: A boolean whether there is a language model to be used.
+            speaker_model: A 'Vocab' word vector representation.
+        """
         super(BahdanauAttnDecoderRNN, self).__init__()
 
         # define parameters
@@ -209,6 +278,7 @@ class BahdanauAttnDecoderRNN(nn.Module):
             self.do_flatten_parameters = True
 
     def freeze_attn(self) -> None:
+        """Stop calculating gradients for attention layer."""
         for param in self.attn.parameters():
             param.requires_grad = False
 
@@ -219,18 +289,25 @@ class BahdanauAttnDecoderRNN(nn.Module):
         encoder_outputs: torch.Tensor,
         vid_indices: torch.Tensor = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        :param motion_input:
-            motion input for current time step, in shape [batch x dim]
-        :param last_hidden:
-            last hidden state of the decoder, in shape [layers x batch x hidden_size]
-        :param encoder_outputs:
-            encoder outputs in shape [steps x batch x hidden_size]
-        :param vid_indices:
-        :return
-            decoder output
-        Note: we run this one step at a time i.e. you should use an outer loop
+        """Forward pass with motion input, previous decoder state and encoder output.
+
+        Note: we run this one step at a time i.e. you should use a outer loop
             to process the whole sequence
+
+        Args:
+            motion_input: A Tensor of motion input for current time step,
+                in shape [batch x dim]
+            last_hidden: A Tensor last hidden state of the decoder,
+                in shape [layers x batch x hidden_size]
+            encoder_outputs: A Tensor of encoder outputs
+                in shape [steps x batch x hidden_size]
+            vid_indices (torch.Tensor): A Tensor of frame indices.
+
+        Returns:
+            A 3-Tuple:
+                output: Tensor of output from decoder.
+                decoder: Tensor of the hidden state.
+                attn_weights: Tensor of custom 'Attn' layer weights.
         """
 
         if self.do_flatten_parameters:
@@ -297,7 +374,14 @@ class BahdanauAttnDecoderRNN(nn.Module):
 
 
 class Generator(nn.Module):
-    """ """
+    """Custom RNN Decoder subclass.
+
+    Attributes:
+        output_size: An integer size of the output.
+        n_layers: An integer number of hidden (recurrent) layers (in the RNN).
+        discrete_representation: A boolean to use a word vector representation.
+        decoder: A 'BahdanauAttnDecoderRNN' to use for generating output.
+    """
 
     def __init__(
         self,
@@ -306,7 +390,20 @@ class Generator(nn.Module):
         discrete_representation: bool = False,
         speaker_model=None,
     ):
-        """ """
+        """Initailize with prespecified parameters and input size.
+
+        The 'args' argument must have the following keys:
+            autoencoder_conditioned: A string boolean to use zeroes or dropout.
+            autoencoder_att: A string boolean to track 'Attn' scoring.
+            autoencoder_fixed_weight: A string boolean to calculate gradients.
+
+        Args:
+            args: A configargparser with prespecified parameters (See above).
+            motion_dim: An integer dimension of the output data.
+            discrete_representation: A boolean to use a word vector representation
+                (default: false).
+            speaker_model: A 'Vocab' pre-trained word vector representation.
+        """
         super(Generator, self).__init__()
         self.output_size = motion_dim
         self.n_layers = args.n_layers
@@ -323,6 +420,7 @@ class Generator(nn.Module):
         )
 
     def freeze_attn(self) -> None:
+        """Stop calculating gradients for attention layer."""
         self.decoder.freeze_attn()
 
     def forward(
@@ -333,7 +431,23 @@ class Generator(nn.Module):
         encoder_output: torch.Tensor,
         vid_indices: torch.Tensor | None = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """ """
+        """Forward pass with multiple Tensors of inputs and hidden weights.
+
+        Argument 'z' is appended to each element in 'motion_input'.
+
+        Args:
+            z: A Tensor of noisy data or None.
+            motion_input: A Tensor of input data.
+            last_hidden: A Tensor of the previous hidden state.
+            encoder_output: A Tensor of the output from encoder.
+            vid_indices: A Tensor of frame indices or None.
+
+        Returns:
+            A 3-Tuple:
+                output: Tensor of output from decoder.
+                decoder: Tensor of the hidden state.
+                attn_weights: Tensor of custom 'Attn' layer weights.
+        """
         if z is None:
             input_with_noise_vec = motion_input
         else:
