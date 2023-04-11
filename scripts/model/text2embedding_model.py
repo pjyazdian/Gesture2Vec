@@ -18,6 +18,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import functional as F
 from model.Helper_models import EncoderRNN_With_Audio, TextEncoderTCN
+from model.vocab import Vocab
 
 debug = False
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -28,6 +29,7 @@ class EncoderRNN(nn.Module):
 
     Attributes:
         input_size: The integer size of the input data.
+        embed_size: The integer dimension of the word vector representation.
         hidden_size: The integer size of the hidden layer in a Linear layer.
         n_layers: The integer size of GRU output layers.
         dropout: The float probability for adding noise to data.
@@ -49,6 +51,7 @@ class EncoderRNN(nn.Module):
 
         Args:
             input_size: An integer size of the input data.
+            embed_size: An integer dimension of the word vector representation.
             hidden_size: An integer size of the hidden layer in a Linear layer.
             n_layers: An integer for the layers in GRU output size (default 1).
             dropout: A float probability for adding noise to data (default 50%).
@@ -90,7 +93,7 @@ class EncoderRNN(nn.Module):
         Args:
             input_seqs: Tensor with shape (num_step(T),batch_size(B)),
                         sorted decreasingly by lengths (for packing).
-            input_seqs: A Tensor of sequence data to pass through.
+            input_lengths: A Tensor of sequence data to pass through.
             hidden: A Tensor of the initial state of GRU.
 
         Returns:
@@ -202,7 +205,7 @@ class BahdanauAttnDecoderRNN(nn.Module):
         n_layers: int = 1,
         dropout_p: float = 0.1,
         discrete_representation: bool = False,
-        speaker_model=None,
+        speaker_model: Vocab | None = None,
     ):
         """Initialize with multiple parameters.
 
@@ -217,8 +220,8 @@ class BahdanauAttnDecoderRNN(nn.Module):
             output_size: The integer size of the output of the output layer.
             n_layers: A integer number of hidden layers.
             dropout_p: A float probability of adding noise in a dropout layer.
-            discrete_representation: A boolean whether there is a language model to be used.
-            speaker_model: A 'Vocab' word vector representation.
+            discrete_representation: A boolean if a language model is used.
+            speaker_model: A 'Vocab' word vector representation or None.
         """
         super(BahdanauAttnDecoderRNN, self).__init__()
 
@@ -287,7 +290,7 @@ class BahdanauAttnDecoderRNN(nn.Module):
         motion_input: torch.Tensor,
         last_hidden: torch.Tensor,
         encoder_outputs: torch.Tensor,
-        vid_indices: torch.Tensor = None,
+        vid_indices: torch.Tensor | None = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Forward pass with motion input, previous decoder state and encoder output.
 
@@ -388,7 +391,7 @@ class Generator(nn.Module):
         args: argparse.Namespace,
         motion_dim: int,
         discrete_representation: bool = False,
-        speaker_model=None,
+        speaker_model: Vocab | None = None,
     ):
         """Initailize with prespecified parameters and input size.
 
@@ -470,7 +473,18 @@ GPT3_embedding_active = False
 
 
 class text2embedding_model(nn.Module):
-    """ """
+    """Base model for text to gesture generation.
+
+    Attributes:
+        text2_embedding_discrete: A boolean to use word vector representation.
+        n_layers: #TODO.
+        encoder: A custom RNN encoder model with/without audio data for text.
+        decoder: A custom RNN decoder model for gestures.
+        n_frames: An integer count of frames in a single sample.
+        n_pre_poses: An integer of frames as a starting point in gesture sample.
+        pose_dim: An integer dimension of a single gesture sample.
+        sentence_frame_length: An integer of frames for a text sample.
+    """
 
     def __init__(
         self,
@@ -480,9 +494,29 @@ class text2embedding_model(nn.Module):
         n_words: int,
         word_embed_size: int,
         word_embeddings: np.ndarray,
-        speaker_model=None,
+        speaker_model: Vocab | None = None,
     ):
-        """ """
+        """Initialize with multiple parameters.
+
+        The 'args' argument must have the following keys:
+            text2_embedding_discrete: A string boolean to use word vector rep.
+            n_layers: #TODO.
+            autoencoder_vq_components: An integer number of clusters in VQVAE.
+            hidden_size: An integer number of output of hidden Linear layer.
+            dropout_prob: A float probability to add noise to data.
+            autoencoder_att: A string boolean to track 'Attn' scoring.
+            n_pre_poses: An integer of frames as a starting point in sample.
+            sentence_frame_length: An integer of frames for a sample of text.
+
+        Args:
+            args: A configargparser object with specified values (See above).
+            pose_dim: An integer dimension of the output data (gesture).
+            n_frames: An integer of frames in a single sample (gesture).
+            n_words: An integer size of the input data.
+            word_embed_size: An integer dimension of the word vector rep.
+            word_embeddings: A pre-trained word vector representation.
+            speaker_model: A custom 'Vocab' object of word vector rep or None.
+        """
         super().__init__()
 
         if args.text2_embedding_discrete == "True":
@@ -564,7 +598,22 @@ class text2embedding_model(nn.Module):
         poses: torch.Tensor,
         GPT3_embeddings: torch.Tensor,
         vid_indices: torch.Tensor | None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, list]:
+        """Forward pass with multiple parameters.
+
+        Args:
+            in_text:
+            in_lengths:
+            in_audio:
+            poses:
+            GPT3_embeddings:
+            vid_indices:
+
+        Returns:
+            A 2-Tuple:
+                outputs:
+                attentions_list:
+        """
         # reshape to (seq x batch x dim)
         in_text = in_text.transpose(0, 1)
         poses = poses.transpose(0, 1)
@@ -690,7 +739,9 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 # device='cpu'
 class EncoderRNN_New(nn.Module):
-    """ """
+    """
+    This class documentation is #TODO.
+    """
 
     def __init__(
         self,
@@ -739,7 +790,9 @@ class EncoderRNN_New(nn.Module):
 
 
 class DecoderRNN_New(nn.Module):
-    """ """
+    """
+    This class documentation is #TODO.
+    """
 
     def __init__(self, hidden_size: int, output_size: int, n_layer: int = 2):
         """ """
@@ -779,7 +832,9 @@ MAX_LENGTH = 4
 
 
 class AttnDecoderRNN_New(nn.Module):
-    """ """
+    """
+    This class documentation is #TODO.
+    """
 
     def __init__(
         self,
@@ -831,7 +886,9 @@ class AttnDecoderRNN_New(nn.Module):
 
 
 class text2embedding_model_New(nn.Module):
-    """ """
+    """
+    This class documentation is #TODO.
+    """
 
     def __init__(
         self,
