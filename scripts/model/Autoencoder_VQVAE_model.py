@@ -68,7 +68,7 @@ class EncoderRNN(nn.Module):
 
         Args:
             input_seqs: Tensor with shape (num_step(T),batch_size(B)),
-                        sorted decreasingly by lengths (for packing).
+                sorted decreasingly by lengths (for packing).
             input_seqs: A Tensor of sequence data to pass through.
             hidden: A Tensor of the initial state of GRU.
 
@@ -243,7 +243,7 @@ class DecoderCNN(nn.Module):
             input_size: An integer size of the input data.
             hidden_size: An integer size of the hidden layer in a Linear layer.
             n_layers: An integer for the layers in GRU output size (default 1).
-            dropout: A float probability for adding noise to data (default 50%).
+            dropout: A float probability to add noise to data (default 50%).
             pre_trained_embedding: A word vector representation or None.
         """
         super(DecoderCNN, self).__init__()
@@ -311,16 +311,13 @@ class DecoderCNN(nn.Module):
 
         Args:
             input_seqs: A Tensor of shape (num_step(T),batch_size(B)),
-                        sorted decreasingly by lengths(for packing)
+                sorted decreasingly by lengths(for packing)
             hidden: A Tensor of initial state of GRU or None.
 
         Returns:
             #TODO
             outputs: CNN outputs in shape (T,B,hidden_size(H))
             hidden: last hidden stat of RNN(i.e. last output for GRU)
-        """
-        """
-
         """
         if self.do_flatten_parameters:
             self.gru.flatten_parameters()
@@ -375,9 +372,9 @@ class Attn(nn.Module):
 
         Args:
             hidden: A Tensor of the previous hidden state of the decoder,
-                    in shape (layers*directions,B,H).
-            encoder_outputs:
-                    A Tensor of encoder outputs from Encoder, in shape (T,B,H).
+                in shape (layers*directions,B,H).
+            encoder_outputs: A Tensor of encoder outputs from Encoder,
+                in shape (T,B,H).
 
         Returns:
             A Tensor with attention energies in shape (B,T).
@@ -395,8 +392,8 @@ class Attn(nn.Module):
         """Calculates energy score between 2 matrices (previous/current state).
 
         Args:
-            hidden: A Tensor of the previous state.
-            encoder_outputs: A Tensor of the next state.
+            hidden: A Tensor of the hidden state.
+            encoder_outputs: A Tensor of encoder output.
 
         Returns:
             A Tensor with the energy score.
@@ -451,7 +448,7 @@ class BahdanauAttnDecoderRNN(nn.Module):
             output_size: The integer size of the output of the output layer.
             n_layers: A integer number of hidden layers.
             dropout_p: A float probability of adding noise in a dropout layer.
-            discrete_representation: A boolean whether there is a language model to be used.
+            discrete_representation: A boolean if language model is to be used.
             speaker_model: A 'Vocab' word vector representation.
         """
         super(BahdanauAttnDecoderRNN, self).__init__()
@@ -533,9 +530,12 @@ class BahdanauAttnDecoderRNN(nn.Module):
             to process the whole sequence
 
         Args:
-            motion_input: A Tensor of motion input for current time step, in shape [batch x dim]
-            last_hidden: A Tensor last hidden state of the decoder, in shape [layers x batch x hidden_size]
-            encoder_outputs: A Tensor of encoder outputs in shape [steps x batch x hidden_size]
+            motion_input: A Tensor of motion input for current time step,
+                in shape [batch x dim]
+            last_hidden: A Tensor last hidden state of the decoder,
+                in shape [layers x batch x hidden_size]
+            encoder_outputs: A Tensor of encoder outputs,
+                in shape [steps x batch x hidden_size]
             vid_indices (torch.Tensor): A Tensor of frame indices.
 
         Returns:
@@ -641,7 +641,8 @@ class Generator(nn.Module):
         Args:
             args: A configargparser with prespecified parameters (See above).
             motion_dim: An integer dimension of the output data.
-            discrete_representation: A boolean to use a word vector representation (default: false).
+            discrete_representation: A boolean to use a word vector representation
+                (default: false).
             speaker_model: A 'Vocab' pre-trained word vector representation.
         """
         super(Generator, self).__init__()
