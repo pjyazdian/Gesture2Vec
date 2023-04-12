@@ -1,29 +1,51 @@
+"""
+"""
+
+
+from __future__ import annotations
 import logging
+from typing import Tuple
+from configargparse import argparse
+import numpy as np
 import torch
 import torch.nn.functional as F
-from sklearn.cluster import KMeans
 import torch.nn as nn
 
 debug = False
 
-
 loss_i = 0
-def custom_loss(output, target, args):
+
+def custom_loss(output: torch.Tensor, target: torch.Tensor, args: argparse.Namespace) -> torch.Tensor:
+    """Calculate a weighted l1, cont and var loss value.
+
+    The 'args' argument must have the following keys:
+        loss_l1_weight: A float weight for l1 loss when summing total loss.
+        loss_cont_weight: A float weight for cont loss when summing total loss.
+        loss_var_weight: A float weight for var loss when summing total loss.
+
+    Args:
+        output: A Tensor of predicted output data.
+        target: A Tensor of ground truth data.
+        args: A configargparse object with specified parameters (See above).
+
+    Returns:
+        A Tensor of weighted average float loss values.
+    """
     n_element = output.numel()
 
     # MSE
     l1_loss = F.l1_loss(output, target)
-    l1_loss *= args.loss_l1_weight
+    l1_loss: torch.Tensor = l1_loss * args.loss_l1_weight
 
     # continuous motion
     diff = [abs(output[:, n, :] - output[:, n-1, :]) for n in range(1, output.shape[1])]
     cont_loss = torch.sum(torch.stack(diff)) / n_element
-    cont_loss *= args.loss_cont_weight
+    cont_loss: torch.Tensor = cont_loss * args.loss_cont_weight
 
     # motion variance
     norm = torch.norm(output, 2, 1)
     var_loss = -torch.sum(norm) / n_element
-    var_loss *= args.loss_var_weight
+    var_loss: torch.Tensor = var_loss * args.loss_var_weight
 
     loss = l1_loss + cont_loss + var_loss
 
@@ -37,7 +59,26 @@ def custom_loss(output, target, args):
     return loss
 
 
-def train_iter_seq2seq(args, epoch, in_text, in_lengths, target_poses, net, optim):
+def train_iter_seq2seq(args: argparse.Namespace, epoch: int, in_text: torch.Tensor, in_lengths: torch.Tensor, target_poses: torch.Tensor, net: torch.nn.Module, optim: torch.optim.Optimizer) -> dict[str, float]:
+    """Perform one iteration of model training.
+
+    The 'args' argument must have the following keys:
+        loss_l1_weight: A float weight for l1 loss when summing total loss.
+        loss_cont_weight: A float weight for cont loss when summing total loss.
+        loss_var_weight: A float weight for var loss when summing total loss.
+
+    Args:
+        args: A configargparser object with specified parameters (See above).
+        epoch: An integer number of epochs (unused).
+        in_text: A Tensor of input data.
+        in_lengths: A Tensor of the dimension of a single input sample.
+        target_poses: A Tensor of ground truth data.
+        net: A PyTorch neural net model (ex. Seq2SeqNet) to train.
+        optim: A PyTorch optimization algorithm object to use.
+
+    Returns:
+        A dict with the string key 'loss' and float 'custom_loss' value.
+    """
     # zero gradients
     optim.zero_grad()
 
@@ -56,14 +97,54 @@ def train_iter_seq2seq(args, epoch, in_text, in_lengths, target_poses, net, opti
 
 
 class RMSLELoss(nn.Module):
+    """Custom Root Mean Square Log Error (RMSLE) Loss subclass of PyTorch net.
+
+    Attributes:
+        mse: A PyTorch MSELoss object.
+    """
     def __init__(self):
+        """Default initialization."""
         super().__init__()
         self.mse = nn.MSELoss()
 
-    def forward(self, pred, actual):
+    def forward(self, pred: torch.Tensor, actual: torch.Tensor) -> torch.Tensor:
+        """Calculate the RMSLELoss from prediction and actual value Tensors.
+
+        Args:
+            pred: A Tensor of predicted values.
+            actual: A Tensor of actual values.
+
+        Returns:
+            A Tensor of RMSLE loss values.
+        """
         return torch.sqrt(self.mse(torch.log(pred + 1), torch.log(actual + 1)))
 
-def train_iter_DAE(args, epoch, noisy_poses, target_poses, net, optim):
+def train_iter_DAE(args: argparse.Namespace, epoch: int, noisy_poses: torch.Tensor, target_poses: torch.Tensor, net: torch.nn.Module, optim: torch.optim.Optimizer) -> Tuple[dict, torch.Tensor] | dict:
+    """Train one iteration of a Part a model.
+
+    The 'args' argument must have the following keys:
+        autoencoder_vq: A string boolean to train a VQVAE model.
+        autoencoder_vae: A string boolean to train a basic VAE model.
+        loss_l1_weight: A float weight for l1 loss when summing total loss.
+        loss_cont_weight: A float weight for cont loss when summing total loss.
+        loss_var_weight: A float weight for var loss when summing total loss.
+
+    Args:
+        args: A configargparser object with specified parameters (See above).
+        epoch: An integer number of iterations (unused).
+        noisy_poses: A Tensor of input data.
+        target_poses: A Tensor of ground truth data.
+        net: A PyTorch neural net (DAE) model (from Part a).
+        optim: A PyTorch optimization algorithm object.
+
+    Returns:
+        A dict or 2-Tuple:
+            Case 1 - autoencoder_vq is 'True':
+                dict: A dict with a string key 'loss' and a float loss score.
+                perplexity_vq: A Tensor of perplexity loss of the latent space.
+            Case 2 - autoencoder_vq is 'False':
+                dict: Same as above.
+    """
     # zero gradients
     optim.zero_grad()
 
@@ -81,7 +162,7 @@ def train_iter_DAE(args, epoch, noisy_poses, target_poses, net, optim):
     # loss
     loss_fn = torch.nn.MSELoss()
 
-    rec_loss = loss_fn(outputs, target_poses)
+    rec_loss: torch.Tensor = loss_fn(outputs, target_poses)
 
     if args.autoencoder_vq == 'True':
         GSOFT = False
@@ -115,7 +196,27 @@ def train_iter_DAE(args, epoch, noisy_poses, target_poses, net, optim):
 
 
 
-def train_iter_Autoencoder_seq2seq(args, epoch, input_poses, target_poses, net, optim):
+def train_iter_Autoencoder_seq2seq(args: argparse.Namespace, epoch: int, input_poses: torch.Tensor, target_poses: torch.Tensor, net: torch.nn.Module, optim: torch.optim.Optimizer) -> dict[str, float]:
+    """Train one iteration of a Part b model.
+
+    The 'args' argument must contain the following keys:
+        autoencoder_vae: A string boolean if a VAE model was trained.
+        autoencoder_freeze_encoder: A string boolean if encoder state is frozen.
+        loss_l1_weight: A float weight for l1 loss when summing total loss.
+        loss_cont_weight: A float weight for cont loss when summing total loss.
+        loss_var_weight: A float weight for var loss when summing total loss.
+
+    Args:
+        args: A configargparser object with specified parameters (See above).
+        epoch: An integer number of iterations (unused).
+        noisy_poses: A Tensor of input data.
+        target_poses: A Tensor of ground truth data.
+        net: A PyTorch neural net (Autoencoder) model (from Part b).
+        optim: A PyTorch optimization algorithm object.
+
+    Returns:
+        A dict with a string key 'loss' and a float loss score.
+    """
     # zero gradients
     optim.zero_grad()
 
@@ -123,7 +224,7 @@ def train_iter_Autoencoder_seq2seq(args, epoch, input_poses, target_poses, net, 
     if args.autoencoder_vae == 'True':
         outputs, _, meu, logvar = net(input_poses, target_poses)
     else:
-        outputs , _ = net(input_poses, target_poses)
+        outputs, _ = net(input_poses, target_poses)
 
     # loss
     #Todo: important: I removed custom loss and replaced it by ll to test
@@ -154,8 +255,24 @@ def train_iter_Autoencoder_seq2seq(args, epoch, input_poses, target_poses, net, 
     return {'loss': loss.item()}
 
 
-def train_iter_Autoencoder_ssl_seq2seq(args, epoch, input_poses, target_poses, net, optim,
-                                       stack_pairs1, stackpairs2, stack_label):
+def train_iter_Autoencoder_ssl_seq2seq(args: argparse.Namespace, epoch: int, input_poses: torch.Tensor, target_poses: torch.Tensor, net: torch.nn.Module, optim: torch.optim.Optimizer,
+                                       stack_pairs1: torch.Tensor, stackpairs2: torch.Tensor, stack_label: torch.Tensor) -> dict[str, float]:
+    """
+
+    Args:
+        args:
+        epoch:
+        input_poses:
+        target_poses:
+        net:
+        optim:
+        stack_pairs1:
+        stack_pairs2:
+        stack_label:
+
+    Returns:
+
+    """
     # zero gradients
     optim.zero_grad()
 
@@ -203,7 +320,7 @@ def train_iter_Autoencoder_ssl_seq2seq(args, epoch, input_poses, target_poses, n
     cos_dist[mask] = cos_dist[mask]*-1
     loss_labeled = torch.sum(cos_dist)
 
-    loss = args.loss_label_weight + loss_unlabeled
+    loss: torch.Tensor = args.loss_label_weight + loss_unlabeled
 
     if args.autoencoder_vae == 'True':
         kl_start_epoch = 10
@@ -227,12 +344,32 @@ def train_iter_Autoencoder_ssl_seq2seq(args, epoch, input_poses, target_poses, n
 
 
 
-def train_iter_c2g_seq2seq(args, epoch, input_Cluster, target_poses, net, optim):
+def train_iter_c2g_seq2seq(args: argparse.Namespace, epoch: int, input_cluster: torch.Tensor, target_poses: torch.Tensor, net: torch.nn.Module, optim: torch.optim.Optimizer) -> dict[str, float]:
+    """
+
+    The 'args' argument must contain the following keys:
+        autoencoder_vae: A string boolean if a VAE model was trained.
+        autoencoder_freeze_encoder: A string boolean if encoder state is frozen.
+        loss_l1_weight: A float weight for l1 loss when summing total loss.
+        loss_cont_weight: A float weight for cont loss when summing total loss.
+        loss_var_weight: A float weight for var loss when summing total loss.
+
+    Args:
+        args: A configargparser object with specified parameters (See above).
+        epoch: An integer number of iterations (unused).
+        input_cluster: A Tensor of input data.
+        target_poses: A Tensor of ground truth data.
+        net: A PyTorch neural net (Autoencoder) model (from Part b).
+        optim: A PyTorch optimization algorithm object.
+
+    Returns:
+        A dict with a string key 'loss' and a float loss score.
+    """
     # zero gradients
     optim.zero_grad()
 
     # generation
-    outputs = net(input_Cluster, target_poses)
+    outputs = net(input_cluster, target_poses)
 
     # loss
     #Todo: important: I removed custom loss and replaced it by ll to test
@@ -247,8 +384,28 @@ def train_iter_c2g_seq2seq(args, epoch, input_Cluster, target_poses, net, optim)
     return {'loss': loss.item()}
 
 
-def train_iter_text2embedding(args, epoch, in_text, in_lengths, in_audio, target_poses, cluster_targets,
-                              GPT3_Embedding, net, optim):
+def train_iter_text2embedding(args: argparse.Namespace, epoch: int, in_text: torch.Tensor, in_lengths: torch.Tensor, in_audio: torch.Tensor, target_poses: torch.Tensor, cluster_targets: torch.Tensor,
+                              GPT3_Embedding: torch.Tensor, net: torch.nn.Module, optim: torch.optim.Optimizer) -> dict[str, float]:
+    """
+
+    The 'args' argument must have the following keys:
+        text2_embedding_discrete:
+
+    Args:
+        args:
+        epoch:
+        in_text:
+        in_lengths:
+        in_audio:
+        target_poses:
+        cluster_targets:
+        GPT3_Embedding:
+        net:
+        optim:
+
+    Returns:
+
+    """
     # zero gradients
     optim.zero_grad()
 
@@ -307,8 +464,24 @@ def train_iter_text2embedding(args, epoch, in_text, in_lengths, in_audio, target
     return {'loss': loss.item()}
 
 
-def train_iter_text2embedding_GAN(args, epoch, in_text, in_lengths, target_poses, cluster_portion,
-                                  g_net, d_net, g_optim, d_optim):
+def train_iter_text2embedding_GAN(args: argparse.Namespace, epoch: int, in_text: torch.Tensor, in_lengths: torch.Tensor, target_poses: torch.Tensor, cluster_portion: torch.Tensor,
+                                  g_net: torch.nn.Module, d_net: torch.nn.Module, g_optim: torch.optim.Optimizer, d_optim: torch.optim.Optimizer) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Args:
+        args:
+        epoch:
+        in_text:
+        in_lengths:
+        target_poses:
+        cluster_portion:
+        g_net:
+        d_net:
+        g_optim:
+        d_optim:
+
+    Returns:
+
+    """
     # zero gradients
     bce_loss = torch.nn.BCELoss()
 
@@ -408,7 +581,20 @@ def train_iter_text2embedding_GAN(args, epoch, in_text, in_lengths, target_poses
 
 
 
-def train_iter_Autoencoder_VQ_seq2seq(args, epoch, input_poses, target_poses, net, optim):
+def train_iter_Autoencoder_VQ_seq2seq(args: argparse.Namespace, epoch: int, input_poses: torch.Tensor, target_poses: torch.Tensor, net: torch.nn.Module, optim: torch.optim.Optimizer) -> Tuple[dict[str, float], torch.Tensor] | dict[str,float]:
+    """
+
+    Args:
+        args:
+        epoch:
+        input_poses:
+        target_poses:
+        net:
+        optim:
+
+    Returns:
+
+    """
     # zero gradients
     optim.zero_grad()
     vq_start_epoch = 0
