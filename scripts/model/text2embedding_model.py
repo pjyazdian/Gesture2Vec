@@ -598,21 +598,21 @@ class text2embedding_model(nn.Module):
         poses: torch.Tensor,
         GPT3_embeddings: torch.Tensor,
         vid_indices: torch.Tensor | None,
-    ) -> Tuple[torch.Tensor, list]:
+    ) -> Tuple[torch.Tensor, list[torch.Tensor]]:
         """Forward pass with multiple parameters.
 
         Args:
-            in_text:
-            in_lengths:
-            in_audio:
-            poses:
-            GPT3_embeddings:
-            vid_indices:
+            in_text: A Tensor of input text data as word vector representations.
+            in_lengths: A Tensor of dimensions of the arg in_text.
+            in_audio: A Tensor of audio data.
+            poses: A Tensor of gesture data to use as starting point in output.
+            GPT3_embeddings: A Tensor of word vectors data from GPT3.
+            vid_indices: A Tensor of frame indices or None.
 
         Returns:
             A 2-Tuple:
-                outputs:
-                attentions_list:
+                outputs: A 2D Tensor of output data.
+                attentions_list: A list of Tensors of 'Attn' scores.
         """
         # reshape to (seq x batch x dim)
         in_text = in_text.transpose(0, 1)
