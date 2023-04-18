@@ -168,10 +168,6 @@ class EncoderCNN(nn.Module):
             ),
             nn.BatchNorm1d(channels[3], affine=True),
             nn.ReLU(inplace=True),
-            # nn.Conv1d(in_channels=channels[3],out_channels=channels[4],kernel_size=2, stride=2, bias=False),
-            # nn.BatchNorm1d(channels[4], affine=True),
-            # nn.ReLU(inplace=True),
-            # nn.Conv1d(in_channels=channels[4],out_channels=channels[5],kernel_size=2, stride=2, bias=False),
         )
 
         self.do_flatten_parameters = False
@@ -181,9 +177,9 @@ class EncoderCNN(nn.Module):
     def forward(
         self, input_seqs: torch.Tensor, hidden: torch.Tensor | None = None
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Forward pass with input data tensor and hidden state tensor.
+        """Forward pass with input data tensor.
 
-        #TODO: outputs is zero tensor?
+        Hidden state tensor is unneeded as this is a CNN.
 
         Args:
             input_seqs: A Tensor of shape (num_step(T),batch_size(B)),
@@ -191,9 +187,8 @@ class EncoderCNN(nn.Module):
             hidden: A Tensor of the initial state of GRU or None.
 
         Returns:
-            #TODO
             outputs: GRU outputs in shape (T,B,hidden_size(H))
-            hidden: last hidden stat of RNN(i.e. last output for GRU)
+            hidden: Zero Tensor. This value is only for API consistency.
         """
         if self.do_flatten_parameters:
             self.gru.flatten_parameters()
@@ -202,13 +197,10 @@ class EncoderCNN(nn.Module):
         input_seq_in_layered = self.in_layer(input_seqs)
         input_seq_in_layered = input_seq_in_layered.permute(
             (1, 2, 0)
-        )  # 128,30,200 --> 128,200,30 n*c*l
-        # outputs, hidden = self.gru(input_seq_in_layered, hidden)
+        )  # 128,30,200 --> 30,200,128 n*c*l
 
         print(self.cnn)
         hidden = self.cnn(input_seq_in_layered)
-        # outputs, output_lengths = torch.nn.utils.rnn.pad_packed_sequence(outputs)  # unpack (back to padded)
-        # outputs = outputs[:, :, :self.hidden_size] + outputs[:, :, self.hidden_size:]  # Sum bidirectional outputs
         outputs = torch.tensor(0)
         if debug:
             print("Encoder_Forward_ out, hidden", outputs.shape, hidden.shape)
@@ -292,10 +284,6 @@ class DecoderCNN(nn.Module):
             ),
             nn.BatchNorm1d(channels[3], affine=True),
             nn.ReLU(inplace=True),
-            # nn.Conv1d(in_channels=channels[3],out_channels=channels[4],kernel_size=2, stride=2, bias=False),
-            # nn.BatchNorm1d(channels[4], affine=True),
-            # nn.ReLU(inplace=True),
-            # nn.Conv1d(in_channels=channels[4],out_channels=channels[5],kernel_size=2, stride=2, bias=False),
         )
 
         self.do_flatten_parameters = False
@@ -305,9 +293,9 @@ class DecoderCNN(nn.Module):
     def forward(
         self, input_seqs: torch.Tensor, hidden: torch.Tensor | None = None
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Forward pass with input data tensor and hidden state tensor.
+        """Forward pass with input data tensor.
 
-        #TODO: hidden is zero Tensor?
+        Hidden state tensor is unneeded as this is a CNN.
 
         Args:
             input_seqs: A Tensor of shape (num_step(T),batch_size(B)),
@@ -315,9 +303,8 @@ class DecoderCNN(nn.Module):
             hidden: A Tensor of initial state of GRU or None.
 
         Returns:
-            #TODO
             outputs: CNN outputs in shape (T,B,hidden_size(H))
-            hidden: last hidden stat of RNN(i.e. last output for GRU)
+            hidden: Zero Tensor. This value is only for API consistency.
         """
         if self.do_flatten_parameters:
             self.gru.flatten_parameters()
@@ -328,15 +315,10 @@ class DecoderCNN(nn.Module):
             input_seqs.squeeze()
         ).unsqueeze(-1)
         input_seq_in_layered = input_seq_in_layered.unsqueeze(0)
-        # input_seq_in_layered = input_seq_in_layered.permute((1,2,0)) #128,30,200 --> 128,200,30 n*c*l
-        # outputs, hidden = self.gru(input_seq_in_layered, hidden)
 
         print("DCNN input_seq_in_layered", input_seq_in_layered.shape)
 
         outputs = self.cnn(input_seq_in_layered)
-        # print("DCNN outputs", outputs.shape)
-        # outputs, output_lengths = torch.nn.utils.rnn.pad_packed_sequence(outputs)  # unpack (back to padded)
-        # outputs = outputs[:, :, :self.hidden_size] + outputs[:, :, self.hidden_size:]  # Sum bidirectional outputs
         hidden = torch.tensor(0)
         if debug:
             print("Encoder_Forward_ out, hidden", outputs.shape, hidden.shape)
@@ -466,23 +448,12 @@ class BahdanauAttnDecoderRNN(nn.Module):
             self.embedding = nn.Embedding(output_size, hidden_size)
             self.dropout = nn.Dropout(dropout_p)
 
-        # if self.speaker_model:
-        #     self.speaker_embedding = nn.Embedding(speaker_model.n_words, 8)
-
-        # calc input size
-        # if self.discrete_representation:
-        #     input_size = hidden_size  # embedding size
-        # linear_input_size = input_size + hidden_size
-        # if self.speaker_model:
-        #     linear_input_size += 8
-
         if args.autoencoder_conditioned == "True":
             self.autoencoder_conditioned = True
         else:
             self.autoencoder_conditioned = False
 
         # define layers
-
         if args.autoencoder_att == "True":
             self.attn = Attn(hidden_size)
             self.att_use = True
@@ -505,7 +476,6 @@ class BahdanauAttnDecoderRNN(nn.Module):
             for param in self.gru.parameters():
                 param.requires_grad = False
 
-        # self.out = nn.Linear(hidden_size * 2, output_size)
         self.out_layer = nn.Linear(hidden_size, output_size)
 
         self.do_flatten_parameters = False
@@ -567,7 +537,7 @@ class BahdanauAttnDecoderRNN(nn.Module):
 
         # attention
         if self.att_use:
-            attn_weights = self.attn(
+            attn_weights: torch.Tensor = self.attn(
                 last_hidden[-1], encoder_outputs
             )  # [batch x 1 x T]
             context = attn_weights.bmm(
@@ -581,7 +551,6 @@ class BahdanauAttnDecoderRNN(nn.Module):
             )  # [1 x batch x (dim + attn_size)]
         else:
             attn_weights = None
-            # rnn_input = torch.cat((motion_input, encoder_outputs), 2)  # [1 x batch x (dim + attn_size)]
             rnn_input = motion_input
         if debug:
             print("Decoder_forward, rnn_input", rnn_input.shape)  # [1, 128, 241])
@@ -589,7 +558,7 @@ class BahdanauAttnDecoderRNN(nn.Module):
         # Check if unconditioned
         if self.autoencoder_conditioned == False:
             rnn_input = torch.zeros_like(rnn_input)
-        rnn_input = nn.Dropout(0.95)(rnn_input)
+        rnn_input: torch.Tensor = nn.Dropout(0.95)(rnn_input)
 
         q = rnn_input.squeeze(0)
         rnn_input = self.pre_linear(rnn_input.squeeze(0))
@@ -710,8 +679,8 @@ class Autoencoder_VQVAE(nn.Module):
 
     Attributes:
         encoder: A PyTorch model to encode gestures.
-        out_layer_encoder: #TODO see below
-        out_layer_decoder: #TODO see below
+        out_layer_encoder: A Linear layer with Tanh activation to scale data.
+        out_layer_decoder: A Linear layer to reshape output to input dimension.
         decoder: A PyTorch model to decode gestures.
         CNN: A boolean to use CNN (instead of RNN) as encoder and decoder.
         VAE: A boolean whether to use basic VAE.
@@ -765,7 +734,6 @@ class Autoencoder_VQVAE(nn.Module):
             pre_trained_embedding=None,
         )
 
-        # TODO: these layers are not used?
         self.out_layer_encoder = nn.Sequential(
             nn.Linear(args.hidden_size, args.hidden_size), nn.Tanh()
         )
