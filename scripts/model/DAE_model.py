@@ -118,7 +118,8 @@ class DAE_Network(nn.Module):
 class VQ_Frame(nn.Module):
     """VQVAE model with custom VQ model between encoder and decoder.
 
-    This class is #TODO.
+    This class is experimental and is not described in the paper.
+    Documentation is as-is and may or may not be provided in the future. #TODO.
 
     Neural net for frame-level generation of gestures.
     Uses Linear layers for both encoder and decoder.
@@ -276,7 +277,8 @@ class VQ_Frame(nn.Module):
 class VQ_Payam(nn.Module):
     """Custom VQ model with fixed cluster numbers for the latent code space.
 
-    This class documentation is #TODO.
+    This class is experimental and is not described in the paper.
+    Documentation is as-is and may or may not be provided in the future. #TODO.
     """
 
     def __init__(self, num_embeddings: int, embedding_dim: int, commitment_cost: float):
@@ -349,7 +351,8 @@ class VQ_Payam(nn.Module):
 class VQ_Payam_EMA(nn.Module):
     """Custom VQ model with flexible cluster numbers for the latent code space.
 
-    This class documentation is #TODO.
+    This class is experimental and is not described in the paper.
+    Documentation is as-is and may or may not be provided in the future. #TODO.
 
     Attributes:
         pre_linear: A PyTorch Linear layer.
@@ -482,7 +485,8 @@ class VQ_Payam_EMA(nn.Module):
 class VQ_Payam_GSOFT(nn.Module):
     """Custom VQ model with soft vectorization for the latent code space.
 
-    This class documentation is #TODO.
+    This class is experimental and is not described in the paper.
+    Documentation is as-is and may or may not be provided in the future. #TODO.
 
     Attributes:
         pre_linear:
@@ -596,7 +600,8 @@ class VQ_Payam_GSOFT(nn.Module):
 class VAE_Network(nn.Module):
     """Variational Autoencoder neural net with noise.
 
-    This class documentation is #TODO.
+    This class is experimental and is not described in the paper.
+    Documentation is as-is and may or may not be provided in the future. #TODO.
 
     Neural net for frame-level generation of gestures.
     Uses Linear layers for both encoder and decoder.
