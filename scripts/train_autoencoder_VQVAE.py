@@ -1,4 +1,30 @@
 """This module runs the training of Part b: Gesture Representation Learning.
+
+The following training parameters must be contained in config file:
+    name: A string filename to save checkpoints with.
+    model_save_path: The string filepath to save checkpoints in.
+    epochs: The integer number of epochs to train for.
+    rep_learning_dim: The integer dimensions of the input data.
+    hidden_size: The integer size of the latent code space.
+    n_layers: The integer count of recurrent units used
+    autoencoder_vq: A boolean to customize training for VQVAE models.
+    autoencoder_vae: A boolean to train VAE model (instead of VQVAE).
+    learning_rate: A float learning rate to use during training.
+    autoencoder_vq_components: An integer for the Embedding size in VQVAE.
+    use_derivative: A boolean string to concat gradients in training.
+    autoencoder_freeze_encoder: A boolean to freeze encoder weights.
+    autoencoder_checkpoint: A string filepath to load checkpoints from.
+    dropout_prob: A float probability for adding noise to data.
+    autoencoder_vq_commitment_cost: A float cost modifier.
+    n_pre_poses: An integer count of frames as a starting point.
+    autoencoder_conditioned: A string boolean to use zeroes or dropout.
+    autoencoder_att: A string boolean to track 'Attn' scoring.
+    autoencoder_fixed_weight: A string boolean to calculate gradients.
+
+Typical usage example:
+    python train_autoencoder_VQVAE.py --config=<CONFIG_FILE>
+
+Note: CONFIG_FILE is the path containing the config file (ex. config/VQVAE.yml).
 """
 
 
@@ -105,6 +131,12 @@ def train_epochs(
         use_derivative: A boolean string to concat gradients in training.
         autoencoder_freeze_encoder: A boolean to freeze encoder weights.
         autoencoder_checkpoint: A string filepath to load checkpoints from.
+        dropout_prob: A float probability for adding noise to data.
+        autoencoder_vq_commitment_cost: A float cost modifier.
+        n_pre_poses: An integer count of frames as a starting point.
+        autoencoder_conditioned: A string boolean to use zeroes or dropout.
+        autoencoder_att: A string boolean to track 'Attn' scoring.
+        autoencoder_fixed_weight: A string boolean to calculate gradients.
 
     Args:
         args: A configargparse object containing the needed config values.

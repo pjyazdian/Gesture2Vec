@@ -1,8 +1,17 @@
-"""Part b: Gesture Representation Learning
+"""This module contains models for Part b: Gesture Representation Learning.
+
+The 'Autoencoder_VQVAE' model is the default model.
+Certain model parameters should be included in a pre-specified config file.
+See docstrings for the parameters that must be included for each model.
 
 Based on the following Se2Seq implementations:
 - https://github.com/AuCson/PyTorch-Batch-Attention-Seq2seq
 - https://github.com/spro/practical-pytorch/blob/master/seq2seq-translation/seq2seq-translation-batched.ipynb
+
+Typical usage example:
+    args = config.parse_args()
+    net = Autoencoder_VQVAE(args, 135, 30)
+    result_tuple = net(in_tensor, one_start_frame_per_output_tensor)
 """
 
 
@@ -676,6 +685,10 @@ class Generator(nn.Module):
 
 class Autoencoder_VQVAE(nn.Module):
     """Base model for gesture representation learning.
+
+    Part b model as described in the paper. Can use CNN or RNN (default) as the
+    encoder and decoder models. VAE and VQVAE models can be used in the latent
+    code space. Some VAE/VQVAE models are experimental and are provided as-is.
 
     Attributes:
         encoder: A PyTorch model to encode gestures.
