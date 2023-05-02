@@ -1,4 +1,34 @@
-"""Part c: Gestures Sequence Chunking and Part d: Text to Gesture Translation
+"""This scripts runs the training and testing of Part d: Text to Gesture Translation.
+
+The following training parameters must be contained in config file:
+    n_poses: An integer number of frames per data point.
+    text2_embedding_discrete:
+    autoencoder_vq_components: An integer for the embedding size for VQVAE.
+    wordembed_dim: An integer dimension of the word vector representation.
+    n_layers: An integer size for GRU output layers.
+    hidden_size: An integer size of the hidden state in GRU.
+    dropout_prob: The float probability for adding noise to data.
+    autoencoder_att: A string boolean to track 'Attn' custom scoring.
+    n_pre_poses: An integer frames as the starting point for output.
+    sentence_frame_length: An integer of frames for a text sample.
+    epoch: An integer number of training epochs.
+    model_save_path: A string directory to save model checkpoints.
+    name: A string name to prefix the saved model.
+    learning_rate: A float learning rate for a PyTorch optimizer.
+    subdivision_stride: An integer of frames between start of two clips.
+    motion_resampling_framerate: An integer of fps to use for training.
+    train_data_path: A string directory of the training dataset.
+    data_mean: A list of float means from each video in the dataset.
+    data_std: A list of float std from each video in the dataset.
+    loader_workers: An integer of subprocesses to use for dataloader.
+    batch_size: An integer size of batches to load for dataloader.
+    val_data_path: A string directory of the testing dataset.
+    wordembed_path: A string representing (FastText) .bin files to use.
+
+Typical usage example:
+    python train_text2embedding.py --config=<CONFIG_FILE>
+
+Note: CONFIG_FILE is the path containing the config file (ex. config/seq2seqtext.yml).
 """
 
 
@@ -9,6 +39,7 @@ import random
 import time
 import sys
 from typing import Tuple
+
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
@@ -38,9 +69,33 @@ debug = False
 
 
 def init_model(
-    args, lang_model: Vocab, pose_dim: int, _device: torch.device | None
+    args, lang_model: Vocab, pose_dim: int, _device: torch.device | str | None
 ) -> Tuple[text2embedding_model, torch.nn.MSELoss]:
-    """ """
+    """Builds a text2embedding model using parameters in 'args'.
+
+    The 'args' argument must contain the following string keys:
+        n_poses: An integer number of frames per data point.
+        text2_embedding_discrete:
+        autoencoder_vq_components: An integer for the embedding size for VQVAE.
+        wordembed_dim: An integer dimension of the word vector representation.
+        n_layers: An integer size for GRU output layers.
+        hidden_size: An integer size of the hidden state in GRU.
+        dropout_prob: The float probability for adding noise to data.
+        autoencoder_att: A string boolean to track 'Attn' custom scoring.
+        n_pre_poses: An integer frames as the starting point for output.
+        sentence_frame_length: An integer of frames for a text sample.
+
+    Args:
+        args: A configargparser object with specific keys (See above).
+        lang_model: A pre-trained 'Vocab' object of word vector representation.
+        pose_dim: An integer dimension of the output data (gesture).
+        device: A PyTorch object or 'cuda' if GPU exists or 'cpu'|None if not.
+
+    Returns:
+        A 2-Tuple:
+            generator: An initialized text2embedding_model.
+            loss_fn: A PyTorch MSELoss object.
+    """
     n_frames: int = args.n_poses
     try:
         if args.text2_embedding_discrete == "True":
@@ -68,7 +123,35 @@ def train_epochs(
     pose_dim: int,
     trial_id=None,
 ) -> None:
-    """ """
+    """Train a text2embedding_model for a given number of epoch.
+
+    Results of the model are plotted.
+    The trained model is saved to file using keys from 'args'.
+
+    The 'args' argument must contain the following string keys:
+        n_poses: An integer number of frames per data point.
+        text2_embedding_discrete:
+        autoencoder_vq_components: An integer for the embedding size for VQVAE.
+        wordembed_dim: An integer dimension of the word vector representation.
+        n_layers: An integer size for GRU output layers.
+        hidden_size: An integer size of the hidden state in GRU.
+        dropout_prob: The float probability for adding noise to data.
+        autoencoder_att: A string boolean to track 'Attn' custom scoring.
+        n_pre_poses: An integer frames as the starting point for output.
+        sentence_frame_length: An integer of frames for a text sample.
+        epoch: An integer number of training epochs.
+        model_save_path: A string directory to save model checkpoints.
+        name: A string name to prefix the saved model.
+        learning_rate: A float learning rate for a PyTorch optimizer.
+
+    Args:
+        args: A configargparser object with specific keys (See above).
+        train_data_loader: A PyTorch dataloader with the training data.
+        test_data_loader: A PyTorch dataloader with the testing data.
+        lang_model: A 'Vocab' with pre-trained word vector representation.
+        pose_dim: An integer dimension of the output data (gesture).
+        trial_id: A string or integer for use as an id (unused).
+    """
     start = time.time()
     loss_meters = [AverageMeter("loss"), AverageMeter("var_loss")]
 
@@ -220,7 +303,22 @@ def evaluate_testset(
     loss_fn: torch.nn.MSELoss,
     args: argparse.Namespace,
 ) -> Tuple[float, float]:
-    """ """
+    """Evaluate a given model with a testing dataset.
+
+    The 'args' argument must have the following keys:
+        text2_embedding_discrete: A string boolean if using word vectors rep.
+
+    Args:
+        test_data_loader: A PyTorch dataloader object with the testing data.
+        generator: A trained 'text2embedding_model'.
+        loss_fn: A PyTorch Loss object (MSELoss).
+        args: A configargparser object that contains specific keys (See above).
+
+    Returns:
+        A 2-Tuple:
+            losses: A float of the average loss.
+            perplexities: A float of the average perplexity score.
+    """
     # to evaluation mode
     generator.train(False)
 
@@ -329,6 +427,17 @@ def plot_loss(
     all_train_loss: list[float],
     perplexities: list[float],
 ) -> None:
+    """Plot a given training, testing and perplexity loss.
+
+    The 'args' argument must contain the following keys:
+        model_save_path: A string directory to save the plots.
+
+    Args:
+        args: A configargparser object with specific keys (See above).
+        all_eval_loss: A list of float testing scores.
+        all_train_loss: A list of float training scores.
+        perplexities: A list of float perplexities scores.
+    """
     # X = np.arange(136-3)
     # fig = plt.figure()
     # ax = fig.add_axes([0, 0, 1, 1])
@@ -359,6 +468,39 @@ def plot_loss(
 
 
 def main(config: dict) -> None:
+    """Main function with a dict containing training/testing parameters.
+
+    Note: fps - frames per second.
+
+    The 'args' must contain the following keys:
+        n_poses: An integer number of frames per data point.
+        text2_embedding_discrete:
+        autoencoder_vq_components: An integer for the embedding size for VQVAE.
+        wordembed_dim: An integer dimension of the word vector representation.
+        n_layers: An integer size for GRU output layers.
+        hidden_size: An integer size of the hidden state in GRU.
+        dropout_prob: The float probability for adding noise to data.
+        autoencoder_att: A string boolean to track 'Attn' custom scoring.
+        n_pre_poses: An integer frames as the starting point for output.
+        sentence_frame_length: An integer of frames for a text sample.
+        epoch: An integer number of training epochs.
+        model_save_path: A string directory to save model checkpoints.
+        name: A string name to prefix the saved model.
+        learning_rate: A float learning rate for a PyTorch optimizer.
+        subdivision_stride: An integer of frames between start of two clips.
+        motion_resampling_framerate: An integer of fps to use for training.
+        train_data_path: A string directory of the training dataset.
+        data_mean: A list of float means from each video in the dataset.
+        data_std: A list of float std from each video in the dataset.
+        loader_workers: An integer of subprocesses to use for dataloader.
+        batch_size: An integer size of batches to load for dataloader.
+        val_data_path: A string directory of the testing dataset.
+        wordembed_path: A string representing (FastText) .bin files to use.
+
+    Args:
+        config: A dict containing the following:
+            'args': A configargparser object with specific keys (See above).
+    """
     args: argparse.Namespace = config["args"]
 
     args.model_save_path = (
