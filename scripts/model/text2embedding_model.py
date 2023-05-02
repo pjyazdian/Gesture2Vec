@@ -1,8 +1,22 @@
-"""Part c: Gestures Sequence Chunking and Part d: Text to Gesture Translation
+"""This module contains models for Part d: Text to Gesture Translation.
 
 Based on the following Se2Seq implementations:
 - https://github.com/AuCson/PyTorch-Batch-Attention-Seq2seq
 - https://github.com/spro/practical-pytorch/blob/master/seq2seq-translation/seq2seq-translation-batched.ipynb
+
+The following parameters must be contained in config file:
+    text2_embedding_discrete: A string boolean to use word vector rep.
+    n_layers: An integer number of recurrent layers in a GRU.
+    autoencoder_vq_components: An integer number of clusters in VQVAE.
+    hidden_size: An integer number of output of hidden Linear layer.
+    dropout_prob: A float probability to add noise to data.
+    autoencoder_att: A string boolean to track 'Attn' scoring.
+    n_pre_poses: An integer of frames as a starting point in sample.
+    sentence_frame_length: An integer of frames for a sample of text.
+
+Typical usage example:
+    model = text2embedding_model(args, 135, 20, 2000000, arr)
+    res = model(in_text, in_lengths, in_audio, poses)
 """
 
 
@@ -10,18 +24,23 @@ from __future__ import annotations
 import math
 import random
 from typing import Tuple
+
 from configargparse import argparse
 import numpy as np
 import torch
-from torch.autograd import Variable
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn import functional as F
+
 from model.Helper_models import EncoderRNN_With_Audio, TextEncoderTCN
 from model.vocab import Vocab
 
 debug = False
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+noisy = False
+audio_context = False
+use_TCN = True
+GPT3_embedding_active = False
 
 
 class EncoderRNN(nn.Module):
@@ -304,7 +323,7 @@ class BahdanauAttnDecoderRNN(nn.Module):
                 in shape [layers x batch x hidden_size]
             encoder_outputs: A Tensor of encoder outputs
                 in shape [steps x batch x hidden_size]
-            vid_indices (torch.Tensor): A Tensor of frame indices.
+            vid_indices (torch.Tensor): A Tensor of frame indices or None.
 
         Returns:
             A 3-Tuple:
@@ -466,18 +485,12 @@ class Generator(nn.Module):
         )
 
 
-noisy = False
-audio_context = False
-use_TCN = True
-GPT3_embedding_active = False
-
-
 class text2embedding_model(nn.Module):
     """Base model for text to gesture generation.
 
     Attributes:
         text2_embedding_discrete: A boolean to use word vector representation.
-        n_layers: #TODO.
+        n_layers: An integer number of recurrent layers in a GRU.
         encoder: A custom RNN encoder model with/without audio data for text.
         decoder: A custom RNN decoder model for gestures.
         n_frames: An integer count of frames in a single sample.
@@ -500,7 +513,7 @@ class text2embedding_model(nn.Module):
 
         The 'args' argument must have the following keys:
             text2_embedding_discrete: A string boolean to use word vector rep.
-            n_layers: #TODO.
+            n_layers: An integer number of recurrent layers in a GRU.
             autoencoder_vq_components: An integer number of clusters in VQVAE.
             hidden_size: An integer number of output of hidden Linear layer.
             dropout_prob: A float probability to add noise to data.
