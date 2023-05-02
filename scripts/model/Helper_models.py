@@ -1,4 +1,6 @@
-"""
+"""This module provides helper models for Part d.
+
+Exported models are EncoderRNN_With_Audio and TextEncoderTCN.
 """
 
 
@@ -112,7 +114,20 @@ def fc(n_layer, n_channel, activation="tanh", batchNorm=True):
 
 
 class WavEncoder2(nn.Module):
+    """An spectral convolutional net for audio .wav data.
+
+    Attributes:
+        input_size: A list with values for n_freqBand and n_contextWin.
+        n_freqBand: An integer for the starting channel size in CNN.
+        n_contextWin: An integer (unused).
+        encoder: The spectral convolutional net.
+        flat_size: #TODO
+        encoder_outputSize: #TODO
+        encoder_fc: #TODO
+    """
+
     def __init__(self):
+        """Initialize with default values."""
         super().__init__()
         self.input_size = [128, 32]
         self.n_freqBand, self.n_contextWin = self.input_size
@@ -130,13 +145,29 @@ class WavEncoder2(nn.Module):
             n_fcLayer, [self.flat_size, *n_fcChannel], activation="tanh", batchNorm=True
         )
 
-    def _infer_flat_size(self):
-        encoder_output = self.encoder(torch.ones(1, *self.input_size))
+    def _infer_flat_size(self) -> Tuple[int, list]:
+        """Get the 1-dimensional size of encoder output.
+
+        #TODO
+
+        Returns:
+            first:
+            second:
+        """
+        encoder_output: torch.Tensor = self.encoder(torch.ones(1, *self.input_size))
         return int(np.prod(encoder_output.size()[1:])), encoder_output.size()[1:]
 
-    def forward(self, x):
-        h = self.encoder(x)
-        h2 = self.encoder_fc(h.view(-1, self.flat_size))
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass with input data.
+
+        Args:
+            x: A Tensor of input data.
+
+        Returns:
+            h2: A Tensor of output after convolution and fully connected layers.
+        """
+        h: torch.Tensor = self.encoder(x)
+        h2: torch.Tensor = self.encoder_fc(h.view(-1, self.flat_size))
 
         return h2  # .transpose(1, 2)  # to (batch x seq x dim)
 
@@ -146,7 +177,20 @@ both = False
 
 
 class EncoderRNN_With_Audio(nn.Module):
-    """ """
+    """An RNN encoder with both text and audio data.
+
+    Attributes:
+        input_size: An integer of the input dimension.
+        hidden_size: An integer of the hidden state size in a GRU.
+        embed_size: An integer size of the (word vector) embedding layer.
+        n_layers: An integer of recurrent layers in a GRU.
+        dropout: A float probability of the dropout within the GRU.
+        embedding: An Embedding layer for word vector representation.
+        gru: The model used for generating output.
+        combine_lin: A Linear layer for reducing embedding dimension.
+        audio_encoder: A custom CNN for encoding audio data.
+        do_flatten_parameters: A boolean if data should be flatten for GPU.
+    """
 
     def __init__(
         self,
@@ -174,9 +218,8 @@ class EncoderRNN_With_Audio(nn.Module):
         self.n_layers = n_layers
         self.dropout = dropout
 
-        if (
-            pre_trained_embedding is not None
-        ):  # use pre-trained embedding (e.g., word2vec, glove)
+        # use pre-trained embedding (e.g., word2vec, glove)
+        if pre_trained_embedding is not None:
             assert pre_trained_embedding.shape[0] == input_size
             assert pre_trained_embedding.shape[1] == embed_size
             self.embedding = nn.Embedding.from_pretrained(
@@ -280,7 +323,15 @@ class EncoderRNN_With_Audio(nn.Module):
 
 
 class WavEncoder_tri(nn.Module):
+    """A Convolutional net for audio data.
+
+    Attributes:
+        feat_extractor: The convolutional net with certain default values.
+        out_layer: A Linear layer to resize output.
+    """
+
     def __init__(self):
+        """Initialize with default values."""
         super().__init__()
         self.feat_extractor = nn.Sequential(
             nn.Conv1d(1, 16, 15, stride=5, padding=1600),
@@ -296,9 +347,17 @@ class WavEncoder_tri(nn.Module):
         )
         self.out_layer = nn.Linear(32 * 15, 200)
 
-    def forward(self, wav_data):
+    def forward(self, wav_data: torch.Tensor) -> torch.Tensor:
+        """Forward pass with input data.
+
+        Args:
+            wav_data: A Tensor of input data.
+
+        Returns:
+            A Tensor of output data.
+        """
         wav_data = wav_data.unsqueeze(1)  # add channel dim
-        out = self.feat_extractor(wav_data)
+        out: torch.Tensor = self.feat_extractor(wav_data)
 
         out = torch.reshape(out, (out.shape[0], -1))
         out = self.out_layer(out)
@@ -310,7 +369,17 @@ from model.tcn import TemporalConvNet
 
 
 class TextEncoderTCN(nn.Module):
-    """based on https://github.com/locuslab/TCN/blob/master/TCN/word_cnn/model.py"""
+    """A Temporal Convolutional Neural Net for text.
+
+    based on https://github.com/locuslab/TCN/blob/master/TCN/word_cnn/model.py
+
+    Attributes:
+        embedding: An Embedding layer for word vector representation.
+        tcn: The TemporalConvNet model.
+        decoder: A Linear layer with hidden_size * n_layer input and 32 output.
+        drop: A Dropout layer for adding noise.
+        emb_dropout: A float probability used in the dropout layer.
+    """
 
     def __init__(
         self,
@@ -325,8 +394,8 @@ class TextEncoderTCN(nn.Module):
         """Initialize with multiple (some optional) parameters.
 
         The 'args' argument must contain the following keys:
-            hidden_size:
-            n_layers:
+            hidden_size: An integer size of the hidden state.
+            n_layers: An integer of channels in a CNN.
 
         Args:
             args: A configargparser object with specific keys (See above).
