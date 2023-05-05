@@ -6,6 +6,8 @@ Twh expects 160 dimensions for gesture data.
 
 Typical usage example:
     python inference_text2embedding.py <part d checkpoint path> <transcript path> <part a checkpoint path> <part b checkpoint path>
+
+Note: checkpoint paths should specify the file (ex. ../output/DAE/model_checkpoint_100.bin).
 """
 
 
