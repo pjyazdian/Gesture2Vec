@@ -6,6 +6,8 @@ Twh expects 160 dimensions for gesture data.
 
 Typical usage example:
     python inference_DAE.py <part a checkpoint path>
+
+Note: checkpoint paths should specify the file (ex. ../output/DAE/model_checkpoint_100.bin).
 """
 
 
@@ -269,7 +271,7 @@ def plot_latent(
     """Plot the latent code space of a Part a (DAE) pretrained model.
 
     The 'args' argument must have the following keys:
-        model_save_path:
+        model_save_path: A string directory to save the plots.
 
     Args:
         args: A configargparser object with specific keys (See above).
@@ -405,6 +407,11 @@ def Plot_Kernel(_model: DAE_Network | VQ_Frame, args: argparse.Namespace) -> Non
 
 
 def main(checkpoint_path: str):
+    """Main inference function for Part a.
+
+    Args:
+        checkpoint_path: A string filepath to a checkpoint model and parameters.
+    """
     (
         args,
         generator,
