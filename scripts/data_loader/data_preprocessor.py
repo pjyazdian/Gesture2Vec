@@ -1,56 +1,104 @@
-""" create data samples """
-import lmdb
+"""create data samples
+"""
+
 import math
-import numpy as np
-import pyarrow
-from deepsegment import DeepSegment
-import torch
-import librosa
-import utils
-from tqdm import tqdm
-import openai
 import pickle
 import os
-from trankit import Pipeline
+from typing import Tuple
+
+import lmdb
+import numpy as np
+import pyarrow
+import torch
+import librosa
+from tqdm import tqdm
+from configargparse import argparse
+from model.vocab import Vocab
+
+import utils
+
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
 class DataPreprocessor:
-    def __init__(self, args, clip_lmdb_dir, out_lmdb_dir, n_poses, subdivision_stride, pose_resampling_fps, sentence_level=False):
-        openai.api_key = "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"
+    """Loads and extracts skeleton, audio and video data from Lmdb files and writes those entires into a separate new Lmdb file.
+
+    Attributes:
+        src_lmdb_env: A Lmdb object containing the origin database environment (similar to PostgreSQL schema).
+        dst_lmdb_env: A Lmdb object containing the destination database environment.
+        n_videos: An integer number of entries in the database (equal to the number of videos in the training set).
+        n_poses: An integer number of frames in each clip in the dataset (normally 30 (in 30 fps)).
+        subdivision_stride: An integer number of frames between the start of one clip and the start of the next clip (clips can overlap).
+        skeleton_resampling_fps: An integer frames per second of clip to use for training (usually downsampled to 20 fps, clips are normally 30 fps).
+        audio_sample_length: An integer length of the audio clip in hertz (sampled at 16,000 Hz).
+        n_out_samples: An integer total number of database entries (audio, video and skeleton) that has been extracted from the original videos.
+        sentence_frame_length: An integer number of frames in each clip but for sentences rather than gestures.
+        audio_sampling_rate: An integer sampling rate for an audio signal.
+        DAE_frame_level: A DAE model only if args.name in the initialization method is not 'DAE'.
+        rnn_representation: A VQVAE model only if 'sentence_level' is True else None.
+        ckpt_path_DAE: A string filepath to a saved 'DAE' checkpoint model.
+        ckpt_path_Autoencode: A string filepath to a saved VQVAE checkpoint model.
+    """
+    def __init__(self, args: argparse.Namespace, clip_lmdb_dir: str, out_lmdb_dir: str, n_poses: int, subdivision_stride: int, pose_resampling_fps: int, sentence_level: bool = False):
+        """Initialize with several dataset parameters.
+
+        Initializes database connections to the lmdb files. Note that the connections are open until closed by the run method.
+
+        The args argument must contain the following keys:
+            name: A string name of the model (ex. 'DAE' or 'autoencoder_vq').
+            rep_learning_checkpoint: If name is not 'DAE', a string filepath to a saved 'DAE' checkpoint model.
+            autoencoder_checkpoint: If sentence level is True, a string filepath to a saved VQVAE checkpoint model.
+            sentence_frame_length: An integer number of frames in each clip (for a sentence instead of gesture).
+
+        Args:
+            args: A configargparser object with specific parameters (See above).
+            clip_lmdb_dir: A string filepath containing the lmdb dataset files.
+            out_lmdb_dir: A string filepath to save output as lmdb files.
+            n_poses: An integer number of frames per second in each clip in the dataset (ex. 30 in 30 fps).
+            subdivision_stride: An integer number of frames between the start of one clip and the start of the next clip (may overlap).
+            pose_resampling_fps: An integer frames per second for training (may differ from clip fps).
+            sentence_level: A boolean flag to add a language model.
+        """
         self.n_poses = n_poses
         self.subdivision_stride = subdivision_stride
         self.skeleton_resampling_fps = pose_resampling_fps
         self.sentence_level = sentence_level
-        self.src_lmdb_env = lmdb.open(clip_lmdb_dir, readonly=True, lock=False)
+        self.src_lmdb_env: lmdb.Environment = lmdb.open(clip_lmdb_dir, readonly=True, lock=False)
         self.out_lmdb_dir = out_lmdb_dir
         with self.src_lmdb_env.begin() as txn:
-            self.n_videos = txn.stat()['entries']
+            self.n_videos: int = txn.stat()['entries']
 
         self.audio_sample_length = int(self.n_poses / self.skeleton_resampling_fps * 16000)
 
-        self.ckpt_path_DAE = args.rep_learning_checkpoint
-        self.ckpt_path_Autoencode = args.autoencoder_checkpoint
+        self.ckpt_path_DAE: str = args.rep_learning_checkpoint
+        self.ckpt_path_Autoencode: str = args.autoencoder_checkpoint
 
         if args.name != "DAE":
-            self.DAE_frame_level = utils.train_utils.load_checkpoint_and_model(
+            self.DAE_frame_level: Tuple[argparse.Namespace, torch.nn.Module, torch.nn.MSELoss, Vocab, int] = utils.train_utils.load_checkpoint_and_model(
                 self.ckpt_path_DAE, device,'DAE')
 
         if self.sentence_level:
-            self.rnn_representation = utils.train_utils.load_checkpoint_and_model(
+            self.rnn_representation: Tuple[argparse.Namespace, torch.nn.Module, torch.nn.MSELoss, Vocab, int] = utils.train_utils.load_checkpoint_and_model(
                 self.ckpt_path_Autoencode, device, 'autoencoder_vq')
 
         # create db for samples
         map_size = 1024 * 50  # in MB
         map_size <<= 20  # in B
-        self.dst_lmdb_env = lmdb.open(out_lmdb_dir, map_size=map_size)
+        self.dst_lmdb_env: lmdb.Environment = lmdb.open(out_lmdb_dir, map_size=map_size)
         self.n_out_samples = 0
 
         self.sentence_frame_length = args.sentence_frame_length
-        self.audi_smaple_rate = 16000
+        self.audio_sampling_rate = 16000
 
 
-    def run(self):
+    def run(self) -> None:
+        """Extract skeleton, audio, word data from source and write entries into a destination Lmdb file.
+
+        Closes both src_lmdb_env and dst_lmdb_env database connections upon completion.
+        Does not return any values. Modifies internal state of the object (Close db connection).
+        """
         src_txn = self.src_lmdb_env.begin(write=False)
         total_count = src_txn.stat()['entries']
+
         # sampling and normalization
         cursor = src_txn.cursor()
         counter = 0
@@ -62,15 +110,8 @@ class DataPreprocessor:
             for clip_idx, clip in enumerate(clips):
                 self._sample_from_clip(vid, clip)
                 counter = counter + 1
-            # if counter>5:
-            #     print("Break the chain of loading huge data!!!!!!1")
-            #     break
 
-        # print stats
-
-
-
-
+        # print number of samples
         with self.dst_lmdb_env.begin() as txn:
             print("Sample_counter", txn.stat()['entries'])
 
@@ -79,10 +120,25 @@ class DataPreprocessor:
         self.dst_lmdb_env.sync()
         self.dst_lmdb_env.close()
 
-    def _sample_from_clip(self, vid, clip):
-        clip_skeleton = clip['poses']
-        clip_audio_raw = clip['audio_raw']
-        clip_word_list = clip['words']
+    def _sample_from_clip(self, vid: str, clip: dict) -> None:
+        """Internal function to extract and write skeleton, audio and word data from provided clip.
+
+        Modifies internal state of the object (n_out_samples, n_poses, audio_sample_length).
+        #TODO
+
+        Args:
+            vid: A string representing the name or id of the clip.
+            clip: A dictionary containing the following string keys:
+                'poses': A Numpy array of pose/gesture data.
+                'audio_raw': A Numpy array of audio data.
+                'words': A list of lists. Each internal list contains 3 elements:
+                    index 0: A float start time.
+                    index 1: A float end time.
+                    index 2: A string word.
+        """
+        clip_skeleton: np.ndarray = clip['poses']
+        clip_audio_raw: np.ndarray = clip['audio_raw']
+        clip_word_list: list[list] = clip['words']
 
         # divide
         aux_info = []
@@ -98,7 +154,7 @@ class DataPreprocessor:
 
         if self.sentence_level:
             self.n_poses = self.sentence_frame_length
-            self.audio_sample_length = int(self.n_poses / self.skeleton_resampling_fps * self.audi_smaple_rate)
+            self.audio_sample_length = int(self.n_poses / self.skeleton_resampling_fps * self.audio_sampling_rate)
 
         num_subdivision = math.floor(
             (len(clip_skeleton) - self.n_poses)
@@ -198,9 +254,9 @@ class DataPreprocessor:
 
             mel_chunks = []
             raw_chunks = []
-            for audio_sub in range(self.audio_sample_length//self.audi_smaple_rate):
-                audio_chunk = sample_audio[audio_sub*self.audi_smaple_rate: (audio_sub+1)*self.audi_smaple_rate]
-                signal = librosa.feature.melspectrogram(y=audio_chunk, sr=self.audi_smaple_rate)
+            for audio_sub in range(self.audio_sample_length//self.audio_sampling_rate):
+                audio_chunk = sample_audio[audio_sub*self.audio_sampling_rate: (audio_sub+1)*self.audio_sampling_rate]
+                signal = librosa.feature.melspectrogram(y=audio_chunk, sr=self.audio_sampling_rate)
                 signal = librosa.power_to_db(signal, ref=np.max)
                 mel_chunks.append(signal)
                 # raw_chunks.append(audio_chunk)
@@ -277,7 +333,20 @@ class DataPreprocessor:
                         self.n_out_samples += 1
 
     @staticmethod
-    def get_words_in_time_range(word_list, start_time, end_time):
+    def get_words_in_time_range(word_list: list[list], start_time: float, end_time: float) -> list[list]:
+        """Retrieves words in the list that fall between the start_time and end_time provided.
+
+        Args:
+            word_list: A list that each element contains a list with three elements:
+                index 0: A float start time.
+                index 1: A float end time.
+                index 2: A string word.
+            start_time: A float indicating when to start filtering.
+            end_time: A float indicating when to end filtering.
+
+        Returns:
+            A list containing all elements in the word_list that fall between the start_time and end_time provided.
+        """
         words = []
 
         for word in word_list:
@@ -294,7 +363,9 @@ class DataPreprocessor:
         return words
 
 
-    def get_pose_latent(self, poses):
+    def get_pose_latent(self, poses: np.ndarray) -> np.ndarray:
+        """TODO
+        """
 
         # 1. Load models
         args, DAE, loss_fn, lang_model, out_dim = self.DAE_frame_level
