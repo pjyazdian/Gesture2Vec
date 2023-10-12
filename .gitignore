@@ -145,3 +145,4 @@ dmypy.json
 output/
 dataset/
 validation/
+data/
