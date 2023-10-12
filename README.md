@@ -18,6 +18,44 @@ This is an official PyTorch implementation of _Gesture2Vec: Clustering Gestures 
 
 ## Instructions
 
+To replicate our results as described in our paper, please follow the instructions below.
+
+### Requirements
+
+This project has been tested in the following environment (using a single Nvidia GPU):
+
+-   Ubuntu 20.04.6 LTS
+-   Anaconda3 23.9
+-   CUDA 12.2
+
+All other dependencies can be found in `gesture2vec.yml` and installed using `conda env create -f gesture2vec.yml`. Activate the environment using `conda activate gesture2vec`. Further details on creating and managing Anaconda environments can be found [here](https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html).
+
+### Dataset
+
+The Trinity Speech-Gesture GENEA Challenge 2020 dataset can be found at the [Trinity Speech-Gesture website](https://trinityspeechgesture.scss.tcd.ie/). The entire dataset can be downloaded and saved to a directory named `data` within this project. The resulting directory should look similar to:
+
+```
+data
+  |
+  --train
+    |
+	--Audio
+	--Motion
+	--Transcripts
+  |
+  --valid
+	|
+	--Audio
+	--Motion
+	--Transcripts
+```
+
+### Data Preprocessing
+
+Run the `trinity_data_to_lmdb` script found in the `scripts` directory. Please refer to the module docstring found at the top of the script for details on how to run the preprocessing script.
+
+### Training
+
 TODO
 
 ## License
