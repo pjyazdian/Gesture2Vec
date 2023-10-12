@@ -36,18 +36,18 @@ The Trinity Speech-Gesture GENEA Challenge 2020 dataset can be found at the [Tri
 
 ```
 data
-  |
-  --train
     |
-	--Audio
-	--Motion
-	--Transcripts
-  |
-  --valid
-	|
-	--Audio
-	--Motion
-	--Transcripts
+    --train
+        |
+        --Audio
+        --Motion
+        --Transcripts
+    |
+    --valid
+        |
+        --Audio
+        --Motion
+        --Transcripts
 ```
 
 ### Data Preprocessing
