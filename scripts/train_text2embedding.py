@@ -2,7 +2,7 @@
 
 The following training parameters must be contained in config file:
     n_poses: An integer number of frames per data point.
-    text2_embedding_discrete:
+    text2_embedding_discrete: A string boolean to use gesture clusters.
     autoencoder_vq_components: An integer for the embedding size for VQVAE.
     wordembed_dim: An integer dimension of the word vector representation.
     n_layers: An integer size for GRU output layers.
@@ -75,7 +75,7 @@ def init_model(
 
     The 'args' argument must contain the following string keys:
         n_poses: An integer number of frames per data point.
-        text2_embedding_discrete:
+        text2_embedding_discrete: A string boolean to use gesture clusters.
         autoencoder_vq_components: An integer for the embedding size for VQVAE.
         wordembed_dim: An integer dimension of the word vector representation.
         n_layers: An integer size for GRU output layers.
@@ -130,7 +130,7 @@ def train_epochs(
 
     The 'args' argument must contain the following string keys:
         n_poses: An integer number of frames per data point.
-        text2_embedding_discrete:
+        text2_embedding_discrete: A string boolean to use gesture clusters.
         autoencoder_vq_components: An integer for the embedding size for VQVAE.
         wordembed_dim: An integer dimension of the word vector representation.
         n_layers: An integer size for GRU output layers.
@@ -306,7 +306,7 @@ def evaluate_testset(
     """Evaluate a given model with a testing dataset.
 
     The 'args' argument must have the following keys:
-        text2_embedding_discrete: A string boolean if using word vectors rep.
+        text2_embedding_discrete: A string boolean to use gesture clusters.
 
     Args:
         test_data_loader: A PyTorch dataloader object with the testing data.
@@ -474,7 +474,7 @@ def main(config: dict) -> None:
 
     The 'args' must contain the following keys:
         n_poses: An integer number of frames per data point.
-        text2_embedding_discrete:
+        text2_embedding_discrete: A string boolean to use gesture clusters.
         autoencoder_vq_components: An integer for the embedding size for VQVAE.
         wordembed_dim: An integer dimension of the word vector representation.
         n_layers: An integer size for GRU output layers.
