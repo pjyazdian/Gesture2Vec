@@ -1,48 +1,121 @@
+"""Utility file to read JSON files containing subtitles into an object.
+
+Typical usage example:
+    s = SubtitleWrapper('dataset/subtitles.json')
+    words = s.get()
+"""
+
 import json
 import re
 
 
-def normalize_string(s):
-    """ lowercase, trim, and remove non-letter characters """
+def normalize_string(s: str) -> str:
+    """Standardize strings to a specific format.
+
+    Standardize the string by:
+        - converting to lowercase,
+        - trim, and
+        - remove non alpha-numeric (except ,.!?) characters.
+
+    Args:
+        s: The string to standardize.
+
+    Returns:
+        A standardized version of the input string.
+    """
     s = s.lower().strip()
     s = re.sub(r"([,.!?])", r" \1 ", s)  # isolate some marks
     s = re.sub(r"(['])", r"", s)  # remove apostrophe (i.e., shouldn't --> shouldnt)
-    s = re.sub(r"[^a-zA-Z0-9,.!?]+", r" ", s)  # replace other characters with whitespace
+    s = re.sub(
+        r"[^a-zA-Z0-9,.!?]+", r" ", s
+    )  # replace other characters with whitespace
     s = re.sub(r"\s+", r" ", s).strip()
     return s
 
 
 class SubtitleWrapper:
-    TIMESTAMP_PATTERN = re.compile('(\d+)?:?(\d{2}):(\d{2})[.,](\d{3})')
+    """Contains the subtitles converted from a JSON file.
 
-    def __init__(self, subtitle_path):
+    Subtitles are expected to be contained in a JSON file with the format:
+    {
+        'alternative':
+            []: # only the first element contains the following:
+                {
+                    'words': [
+                        {
+                            'start_time': '0.100s',
+                            'end_time': '0.500s',
+                            'word': 'really'
+                        },
+                        { <contains more of these structured elements> }
+                    ],
+                    <other data>
+                }
+    }
+    Note: JSON uses double-quotes instead of single-quotes. Single quotes are used for doc-string reasons.
+
+    Attributes:
+        subtitle: A list of strings containing all the subtitles in order.
+    """
+
+    TIMESTAMP_PATTERN = re.compile("(\d+)?:?(\d{2}):(\d{2})[.,](\d{3})")
+
+    def __init__(self, subtitle_path: str):
+        """Initialization method.
+
+        Args:
+            subtitle_path: The string filepath to the subtitle (JSON) file.
+        """
         self.subtitle = []
         self.load_gentle_subtitle(subtitle_path)
 
-    def get(self):
+    def get(self) -> list:
+        """Returns the subtitles as a list of words."""
         return self.subtitle
 
-    # using gentle lib
-    def load_gentle_subtitle(self, subtitle_path):
+    def load_gentle_subtitle(self, subtitle_path: str) -> None:
+        """Loads a single subtitle file into this object.
+
+        Modifies the internal state of this object.
+        The subtitles are loaded in order with a single word appended as a single element.
+
+        Args:
+            substitle_path: The string filepath to the subtitle (JSON) file.
+
+        Raises:
+            An exception if the specified file cannot be found.
+        """
         try:
             with open(subtitle_path) as data_file:
                 data = json.load(data_file)
                 for item in data:
-                    if 'words' in item['alternatives'][0]:
-                        raw_subtitle = item['alternatives'][0]['words']
+                    if "words" in item["alternatives"][0]:
+                        raw_subtitle = item["alternatives"][0]["words"]
                         for word in raw_subtitle:
                             self.subtitle.append(word)
         except FileNotFoundError:
             self.subtitle = None
 
-    # convert timestamp to second
-    def get_seconds(self, word_time_e):
+    def get_seconds(self, word_time_e: str) -> float:
+        """Convert a timestamp into seconds.
+
+        Args:
+            word_time_e: The timestamp as a string (ex. hrs:mins:secs.milli - 02:02:02.125).
+
+        Returns:
+            The timestamp as a float seconds starting from zero.
+        """
         time_value = re.match(self.TIMESTAMP_PATTERN, word_time_e)
         if not time_value:
-            print('wrong time stamp pattern')
+            print("wrong time stamp pattern")
             exit()
 
         values = list(map(lambda x: int(x) if x else 0, time_value.groups()))
-        hours, minutes, seconds, milliseconds = values[0], values[1], values[2], values[3]
+        hours, minutes, seconds, milliseconds = (
+            values[0],
+            values[1],
+            values[2],
+            values[3],
+        )
 
         return hours * 3600 + minutes * 60 + seconds + milliseconds / 1000

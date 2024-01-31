@@ -1,8 +1,16 @@
+"""This module provides helper models for Part d.
+
+Exported models are EncoderRNN_With_Audio and TextEncoderTCN.
+"""
+
+
+from __future__ import annotations
+from typing import Tuple
+
+import argparse
 import torch
 import torch.nn as nn
 import numpy as np
-from torch.nn import functional as F
-
 
 
 class WavEncoder(nn.Module):
@@ -40,7 +48,10 @@ class WavEncoder(nn.Module):
 
         return out11.transpose(1, 2)  # to (batch x seq x dim)
 
-def spec_conv1d(n_layer=3, n_channel=[64, 32, 16, 8], filter_size=[1, 3, 3], stride=[1, 2, 2]):
+
+def spec_conv1d(
+    n_layer=3, n_channel=[64, 32, 16, 8], filter_size=[1, 3, 3], stride=[1, 2, 2]
+):
     """
     Construction of conv. layers. Note the current implementation always effectively turn to 1-D conv,
     inspired by https://arxiv.org/pdf/1704.04222.pdf.
@@ -55,23 +66,26 @@ def spec_conv1d(n_layer=3, n_channel=[64, 32, 16, 8], filter_size=[1, 3, 3], str
         [] allow different activations and batch normalization functions
     """
 
-    assert len(n_channel) == n_layer + 1, "This must fulfill: len(n_channel) = n_layer + 1"
+    assert (
+        len(n_channel) == n_layer + 1
+    ), "This must fulfill: len(n_channel) = n_layer + 1"
     ast_msg = "The following must fulfill: len(filter_size) == len(stride) == n_layer"
     assert len(filter_size) == len(stride) == n_layer, ast_msg
 
     # construct layers
     conv_layers = []
     for i in range(n_layer):
-        in_channel, out_channel = n_channel[i:i + 2]
+        in_channel, out_channel = n_channel[i : i + 2]
         conv_layers += [
             nn.Conv1d(in_channel, out_channel, filter_size[i], stride[i]),
             nn.ReLU(),
-            nn.BatchNorm1d(out_channel)
+            nn.BatchNorm1d(out_channel),
         ]
 
     return nn.Sequential(*conv_layers)
 
-def fc(n_layer, n_channel, activation='tanh', batchNorm=True):
+
+def fc(n_layer, n_channel, activation="tanh", batchNorm=True):
     """
     Construction of fc. layers.
     :param n_layer: number of fc. layers
@@ -82,8 +96,10 @@ def fc(n_layer, n_channel, activation='tanh', batchNorm=True):
         [] allow different activations and batch normalization functions
     """
 
-    assert len(n_channel) == n_layer + 1, "This must fulfill: len(n_channel) = n_layer + 1"
-    assert activation in [None, 'tanh'], "Only implement 'tanh' for now"
+    assert (
+        len(n_channel) == n_layer + 1
+    ), "This must fulfill: len(n_channel) = n_layer + 1"
+    assert activation in [None, "tanh"], "Only implement 'tanh' for now"
 
     fc_layers = []
     for i in range(n_layer):
@@ -96,8 +112,22 @@ def fc(n_layer, n_channel, activation='tanh', batchNorm=True):
 
     return nn.Sequential(*fc_layers)
 
+
 class WavEncoder2(nn.Module):
+    """An spectral convolutional net for audio .wav data.
+
+    Attributes:
+        input_size: A list with values for n_freqBand and n_contextWin.
+        n_freqBand: An integer for the starting channel size in CNN.
+        n_contextWin: An integer (unused).
+        encoder: The spectral convolutional net.
+        flat_size: #TODO
+        encoder_outputSize: #TODO
+        encoder_fc: #TODO
+    """
+
     def __init__(self):
+        """Initialize with default values."""
         super().__init__()
         self.input_size = [128, 32]
         self.n_freqBand, self.n_contextWin = self.input_size
@@ -107,25 +137,80 @@ class WavEncoder2(nn.Module):
         stride = [1, 2, 2]
         n_fcLayer = 1
         n_fcChannel = [200]
-        self.encoder = spec_conv1d(n_convLayer, [self.n_freqBand] + n_convChannel, filter_size, stride)
+        self.encoder = spec_conv1d(
+            n_convLayer, [self.n_freqBand] + n_convChannel, filter_size, stride
+        )
         self.flat_size, self.encoder_outputSize = self._infer_flat_size()
-        self.encoder_fc = fc(n_fcLayer, [self.flat_size, *n_fcChannel], activation='tanh', batchNorm=True)
+        self.encoder_fc = fc(
+            n_fcLayer, [self.flat_size, *n_fcChannel], activation="tanh", batchNorm=True
+        )
 
-    def _infer_flat_size(self):
-        encoder_output = self.encoder(torch.ones(1, *self.input_size))
+    def _infer_flat_size(self) -> Tuple[int, list]:
+        """Get the 1-dimensional size of encoder output.
+
+        #TODO
+
+        Returns:
+            first:
+            second:
+        """
+        encoder_output: torch.Tensor = self.encoder(torch.ones(1, *self.input_size))
         return int(np.prod(encoder_output.size()[1:])), encoder_output.size()[1:]
 
-    def forward(self, x):
-        h = self.encoder(x)
-        h2 = self.encoder_fc(h.view(-1, self.flat_size))
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass with input data.
 
-        return h2 #.transpose(1, 2)  # to (batch x seq x dim)
+        Args:
+            x: A Tensor of input data.
+
+        Returns:
+            h2: A Tensor of output after convolution and fully connected layers.
+        """
+        h: torch.Tensor = self.encoder(x)
+        h2: torch.Tensor = self.encoder_fc(h.view(-1, self.flat_size))
+
+        return h2  # .transpose(1, 2)  # to (batch x seq x dim)
 
 
 Audio_Features = True
 both = False
+
+
 class EncoderRNN_With_Audio(nn.Module):
-    def __init__(self, input_size, embed_size, hidden_size, n_layers=1, dropout=0.5, pre_trained_embedding=None):
+    """An RNN encoder with both text and audio data.
+
+    Attributes:
+        input_size: An integer of the input dimension.
+        hidden_size: An integer of the hidden state size in a GRU.
+        embed_size: An integer size of the (word vector) embedding layer.
+        n_layers: An integer of recurrent layers in a GRU.
+        dropout: A float probability of the dropout within the GRU.
+        embedding: An Embedding layer for word vector representation.
+        gru: The model used for generating output.
+        combine_lin: A Linear layer for reducing embedding dimension.
+        audio_encoder: A custom CNN for encoding audio data.
+        do_flatten_parameters: A boolean if data should be flatten for GPU.
+    """
+
+    def __init__(
+        self,
+        input_size: int,
+        embed_size: int,
+        hidden_size: int,
+        n_layers: int = 1,
+        dropout: float = 0.5,
+        pre_trained_embedding: np.ndarray | None = None,
+    ):
+        """Initialize with input, embed, hidden sizes with optional arguments.
+
+        Args:
+            input_size: An integer of the input dimension.
+            embed_size: An integer size of the (word vector) embedding layer.
+            hidden_size: An integer of the hidden state size in a GRU.
+            n_layers: An integer of recurrent layers in a GRU (default 1).
+            dropout: A float probability of the dropout within the GRU.
+            pre_trained_embedding: A pre-trained word vector rep or None.
+        """
         super(EncoderRNN_With_Audio, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
@@ -133,67 +218,92 @@ class EncoderRNN_With_Audio(nn.Module):
         self.n_layers = n_layers
         self.dropout = dropout
 
-        if pre_trained_embedding is not None:  # use pre-trained embedding (e.g., word2vec, glove)
+        # use pre-trained embedding (e.g., word2vec, glove)
+        if pre_trained_embedding is not None:
             assert pre_trained_embedding.shape[0] == input_size
             assert pre_trained_embedding.shape[1] == embed_size
-            self.embedding = nn.Embedding.from_pretrained(torch.FloatTensor(pre_trained_embedding), freeze=False)
+            self.embedding = nn.Embedding.from_pretrained(
+                torch.FloatTensor(pre_trained_embedding), freeze=False
+            )
         else:
             self.embedding = nn.Embedding(input_size, embed_size)
 
-        self.gru = nn.GRU(embed_size, hidden_size, n_layers, dropout=self.dropout, bidirectional=True)
-
+        self.gru = nn.GRU(
+            embed_size, hidden_size, n_layers, dropout=self.dropout, bidirectional=True
+        )
 
         if Audio_Features:
             self.combine_lin = nn.Linear(embed_size * 2, embed_size)
             self.audio_encoder = WavEncoder2()
-            self.gru = nn.GRU(hidden_size, hidden_size, n_layers,
-                              dropout=self.dropout, bidirectional=True)
+            self.gru = nn.GRU(
+                hidden_size,
+                hidden_size,
+                n_layers,
+                dropout=self.dropout,
+                bidirectional=True,
+            )
         if both:
             self.audio_encoder = WavEncoder_tri()
-            self.gru = nn.GRU(embed_size+hidden_size, hidden_size, n_layers,
-                              dropout=self.dropout, bidirectional=True)
-
+            self.gru = nn.GRU(
+                embed_size + hidden_size,
+                hidden_size,
+                n_layers,
+                dropout=self.dropout,
+                bidirectional=True,
+            )
 
         self.do_flatten_parameters = False
         if torch.cuda.device_count() > 1:
             self.do_flatten_parameters = True
 
-    def forward(self, input_text, input_lengths, input_audio, hidden=None):
-        '''
-        :param input_text:
-            Variable of shape (num_step(T),batch_size(B)), sorted decreasingly by lengths(for packing)
-        :param input_lengths:
-            list of sequence length
-        :param hidden:
-            initial state of GRU
-        :returns:
-            GRU outputs in shape (T,B,hidden_size(H))
-            last hidden stat of RNN(i.e. last output for GRU)
-        '''
+    def forward(
+        self,
+        input_text: torch.Tensor,
+        input_lengths: torch.Tensor,
+        input_audio: torch.Tensor,
+        hidden: torch.Tensor | None = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Forward pass with text, sequence length and audio tensors.
+
+        Args:
+            input_text: Variable of shape (num_step(T),batch_size(B)),
+                        sorted decreasingly by lengths(for packing).
+            input_lengths: List of sequence length.
+            hidden: Initial state of GRU or None.
+        Returns:
+            A 2-Tuple:
+                outputs: GRU outputs in shape (T,B,hidden_size(H)).
+                hidden: last hidden stat of RNN (i.e. last output for GRU).
+        """
         if self.do_flatten_parameters:
             self.gru.flatten_parameters()
-        '''
-
-        embedded = self.embedding(input_text)
-        packed = torch.nn.utils.rnn.pack_padded_sequence(embedded, input_lengths)
-        '''
 
         if Audio_Features or both:
             # Todo: we may need do somepreprocessing.
-            audio_shape = input_audio.shape # [B, Seq_lenght, 1D-signal]
+            audio_shape = input_audio.shape  # [B, Seq_lenght, 1D-signal]
 
             audio_raw_for_now = False
-            if  audio_raw_for_now:
-                input_audio = torch.reshape(input_audio, (-1, audio_shape[2])) # [B*Seq_len, 1D_signal]
+            if audio_raw_for_now:
+                input_audio = torch.reshape(
+                    input_audio, (-1, audio_shape[2])
+                )  # [B*Seq_len, 1D_signal]
 
             else:
-                input_audio = torch.reshape(input_audio, (-1, audio_shape[-2],  # [B*Seq_len, freq_band, chunk_len]
-                                                          audio_shape[-1]))
+                input_audio = torch.reshape(
+                    input_audio,
+                    (
+                        -1,
+                        audio_shape[-2],  # [B*Seq_len, freq_band, chunk_len]
+                        audio_shape[-1],
+                    ),
+                )
             audio_feat = self.audio_encoder(input_audio)
-            audio_feat = torch.reshape(audio_feat, (audio_shape[1], audio_shape[0], -1 ))
+            audio_feat = torch.reshape(audio_feat, (audio_shape[1], audio_shape[0], -1))
             if both:
                 embedded = self.embedding(input_text)
-                packed = torch.nn.utils.rnn.pack_padded_sequence(embedded, input_lengths)
+                packed = torch.nn.utils.rnn.pack_padded_sequence(
+                    embedded, input_lengths
+                )
                 packed = torch.cat((packed, audio_feat), dim=2)
             # packed = self.combine_lin(packed)
             else:
@@ -201,19 +311,27 @@ class EncoderRNN_With_Audio(nn.Module):
 
         outputs, hidden = self.gru(packed, hidden)
         # outputs, output_lengths = torch.nn.utils.rnn.pad_packed_sequence(outputs)  # unpack (back to padded)
-        outputs = outputs[:, :, :self.hidden_size] + outputs[:, :, self.hidden_size:]  # Sum bidirectional outputs
+        outputs = (
+            outputs[:, :, : self.hidden_size] + outputs[:, :, self.hidden_size :]
+        )  # Sum bidirectional outputs
         return outputs, hidden
-
-
-
 
 
 # ----------------------------------------------------------
 # Trimodal paper
 # ----------------------------------------------------------
 
+
 class WavEncoder_tri(nn.Module):
+    """A Convolutional net for audio data.
+
+    Attributes:
+        feat_extractor: The convolutional net with certain default values.
+        out_layer: A Linear layer to resize output.
+    """
+
     def __init__(self):
+        """Initialize with default values."""
         super().__init__()
         self.feat_extractor = nn.Sequential(
             nn.Conv1d(1, 16, 15, stride=5, padding=1600),
@@ -227,57 +345,112 @@ class WavEncoder_tri(nn.Module):
             nn.LeakyReLU(0.3, inplace=True),
             nn.Conv1d(64, 32, 15, stride=6),
         )
-        self.out_layer = nn.Linear(32*15, 200)
-    def forward(self, wav_data):
+        self.out_layer = nn.Linear(32 * 15, 200)
+
+    def forward(self, wav_data: torch.Tensor) -> torch.Tensor:
+        """Forward pass with input data.
+
+        Args:
+            wav_data: A Tensor of input data.
+
+        Returns:
+            A Tensor of output data.
+        """
         wav_data = wav_data.unsqueeze(1)  # add channel dim
-        out = self.feat_extractor(wav_data)
+        out: torch.Tensor = self.feat_extractor(wav_data)
 
         out = torch.reshape(out, (out.shape[0], -1))
         out = self.out_layer(out)
-        return out #.transpose(1, 2)  # to (batch x seq x dim)
+        return out  # .transpose(1, 2)  # to (batch x seq x dim)
+
 
 # ----------------------------------------------------------
 from model.tcn import TemporalConvNet
+
+
 class TextEncoderTCN(nn.Module):
-    """ based on https://github.com/locuslab/TCN/blob/master/TCN/word_cnn/model.py """
-    def __init__(self, args, n_words, embed_size=300, pre_trained_embedding=None,
-                 kernel_size=2, dropout=0.3, emb_dropout=0.1):
+    """A Temporal Convolutional Neural Net for text.
+
+    based on https://github.com/locuslab/TCN/blob/master/TCN/word_cnn/model.py
+
+    Attributes:
+        embedding: An Embedding layer for word vector representation.
+        tcn: The TemporalConvNet model.
+        decoder: A Linear layer with hidden_size * n_layer input and 32 output.
+        drop: A Dropout layer for adding noise.
+        emb_dropout: A float probability used in the dropout layer.
+    """
+
+    def __init__(
+        self,
+        args: argparse.Namespace,
+        n_words: int,
+        embed_size: int = 300,
+        pre_trained_embedding: np.ndarray | None = None,
+        kernel_size: int = 2,
+        dropout: float = 0.3,
+        emb_dropout: float = 0.1,
+    ):
+        """Initialize with multiple (some optional) parameters.
+
+        The 'args' argument must contain the following keys:
+            hidden_size: An integer size of the hidden state.
+            n_layers: An integer of channels in a CNN.
+
+        Args:
+            args: A configargparser object with specific keys (See above).
+            n_words: An integer of the input dimension size.
+            embed_size: An integer size of the input to temporal conv net.
+            pre_trained_embedding: A (FastText) word vector rep or None.
+            kernel_size: An integer for kernel size in temporal conv net.
+            dropout: A float probability for the dropout (noise) in conv net.
+            emb_dropout: A float probabilty for the dropout (noise) in this.
+        """
         super(TextEncoderTCN, self).__init__()
 
         if pre_trained_embedding is not None:  # use pre-trained embedding (fasttext)
             assert pre_trained_embedding.shape[0] == n_words
             assert pre_trained_embedding.shape[1] == embed_size
-            self.embedding = nn.Embedding.from_pretrained(torch.FloatTensor(pre_trained_embedding),
-                                                          freeze=False)
+            self.embedding = nn.Embedding.from_pretrained(
+                torch.FloatTensor(pre_trained_embedding), freeze=False
+            )
         else:
             self.embedding = nn.Embedding(n_words, embed_size)
 
         num_channels = [args.hidden_size] * args.n_layers
-        self.tcn = TemporalConvNet(embed_size, num_channels, kernel_size, dropout=dropout)
+        self.tcn = TemporalConvNet(
+            embed_size, num_channels, kernel_size, dropout=dropout
+        )
 
         self.decoder = nn.Linear(num_channels[-1], 32)
         self.drop = nn.Dropout(emb_dropout)
         self.emb_dropout = emb_dropout
         self.init_weights()
 
-    def init_weights(self):
+    def init_weights(self) -> None:
+        """Initializes weights in decoder."""
         self.decoder.bias.data.fill_(0)
         self.decoder.weight.data.normal_(0, 0.01)
 
-    def forward(self, input):
+    def forward(self, input: torch.Tensor) -> Tuple[torch.Tensor, int]:
+        """Forward pass with input tensor.
+
+        Args:
+            input: A tensor of input data.
+
+        Returns:
+            A 2-Tuple:
+                y: output from model.
+                0: zero.
+        """
         emb = self.drop(self.embedding(input))
         y = self.tcn(emb.transpose(1, 2)).transpose(1, 2)
         y = self.decoder(y)
         return y.contiguous(), 0
 
 
-
-
-
-
-
 # Attention is all you need
-'''
+"""
 class Encoder_ATX(nn.Module):
     def __init__(self,
                  input_dim,
@@ -664,4 +837,4 @@ class DNN(nn.Module):
             else:
                  x = F.relu(self.fc[i](x))
         return x
-'''
+"""
