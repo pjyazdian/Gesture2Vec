@@ -1,15 +1,15 @@
 name: VQVAE
 
-train_data_path: /local-scratch/pjomeyaz/GENEA_DATASET/trinityspeechgesture.scss.tcd.ie/data/GENEA_Challenge_2020_data_release/Training_data/lmdb/lmdb_train
+train_data_path: ../../data/Training_data/lmdb/lmdb_train
 sentence_level: True
 
-#val_data_path: /mnt/work2/Trinity_Gesture_DB/lmdb/lmdb_test
-val_data_path: /local-scratch/pjomeyaz/GENEA_DATASET/trinityspeechgesture.scss.tcd.ie/data/GENEA_Challenge_2020_data_release/Training_data/lmdb//lmdb_test
+
+val_data_path: ../../data/Training_data/lmdb//lmdb_test
 
 wordembed_dim: 300
 wordembed_path: ../resource/crawl-300d-2M-subword.bin  # fasttext
 
-model_save_path: ../output/2023/gesture2vec_VQ-VAE_16X
+model_save_path: ../output/2024/Gesture2Vec_VQ-VAE
 random_seed: 0
 
 input_motion_dim: 135
@@ -20,7 +20,7 @@ data_std: [0.08801, 0.03111, 0.01127, 0.03111, 0.08801, 0.03806, 0.01147, 0.0381
 model: seq2seq
 hidden_size: 200
 n_layers: 2
-dropout_prob: 0.0
+dropout_prob: 0.2
 
 #Atuoencoder parameters:
 autoencoder_denoising: True
@@ -45,7 +45,7 @@ loss_label_weight: 5.5
 
 
 # train params
-epochs: 200
+epochs: 10
 batch_size: 128
 learning_rate: 0.0005
 loss_l1_weight: 5
@@ -62,7 +62,7 @@ sentence_frame_length: 120
 loader_workers: 4
 
 #reoresentation learning
-rep_learning_checkpoint: ../output/2023/pose2vec_1_Vanilla/train_DAE_H40/Frame_Level_H40_checkpoint_020.bin
+rep_learning_checkpoint: ../output/2024/pose2vec_1_Vanilla/train_DAE_H40/Frame_Level_H40_checkpoint_020.bin
 rep_learning_dim: 40
 autoencoder_checkpoint: ../output/autoencoder/toturial/4th/VQ-DVAE_ablation1_checkpoint_015.bin
 #GAN

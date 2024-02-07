@@ -1,20 +1,20 @@
 name: Frame_Level
 
-train_data_path: /local-scratch/pjomeyaz/GENEA_DATASET/trinityspeechgesture.scss.tcd.ie/data/GENEA_Challenge_2020_data_release/Training_data/lmdb/lmdb_train
+train_data_path: ../../data/Training_data/lmdb/lmdb_train
 sentence_level: True
 
-#val_data_path: /mnt/work2/Trinity_Gesture_DB/lmdb/lmdb_test
-val_data_path: /local-scratch/pjomeyaz/GENEA_DATASET/trinityspeechgesture.scss.tcd.ie/data/GENEA_Challenge_2020_data_release/Training_data/lmdb//lmdb_test
+
+val_data_path: ../../data/Training_data/lmdb//lmdb_test
 
 wordembed_dim: 300
 wordembed_path: ../resource/crawl-300d-2M-subword.bin  # fasttext
 
-model_save_path: ../output/2023/pose2vec_1_Vanilla
+model_save_path: ../output/2024/pose2vec_1_Vanilla
 random_seed: 0
 
 # model params
 model: DAE_complex
-hidden_size: 200
+hidden_size: 40
 n_layers: 2
 dropout_prob: 0.2
 
@@ -56,7 +56,7 @@ loss_var_weight: 0.5
 
 # dataset params
 motion_resampling_framerate: 20
-n_poses: 30
+n_poses: 20
 n_pre_poses: 1
 subdivision_stride: 5
 subdivision_stride_sentence: 20
@@ -64,9 +64,9 @@ sentence_frame_length: 120
 loader_workers: 4
 
 #reoresentation learning
-rep_learning_checkpoint: ../output/DAE_old/train_DAE_H41/rep_learning_DAE_H41_checkpoint_020.bin
-rep_learning_dim: 41
-autoencoder_checkpoint: ../output/autoencoder/toturial/4th/VQ-DVAE_ablation1_checkpoint_015.bin
+rep_learning_checkpoint: None
+rep_learning_dim: 0
+autoencoder_checkpoint: None
 #GAN
 noise_dim: 400
 
