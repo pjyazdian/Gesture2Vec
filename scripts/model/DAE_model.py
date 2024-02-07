@@ -214,7 +214,7 @@ class VQ_Frame(nn.Module):
             return mu  # + std * eps
 
     def forward(
-        self, x: torch.Tensor, inference: bool = False
+        self, x: torch.Tensor, Inference: bool = False
     ) -> (
         Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
         | Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
@@ -262,7 +262,7 @@ class VQ_Frame(nn.Module):
         x = torch.unsqueeze(x, 2)
 
         # print("Decoder", x.shape)
-        if inference:
+        if Inference:
             return x, latent, encodings
         else:
             if self.gs_soft:

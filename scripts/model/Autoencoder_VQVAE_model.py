@@ -813,7 +813,7 @@ class Autoencoder_VQVAE(nn.Module):
                     self.commitment_cost,
                 )
 
-            self.vq_layer = VQ_Payam_GSSoft16(
+            self.vq_layer = VQ_Payam_GSSoft(
                 self.vq_components,
                 args.hidden_size * args.n_layers,
                 self.commitment_cost,

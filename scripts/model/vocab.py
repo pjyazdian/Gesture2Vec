@@ -191,7 +191,7 @@ class Vocab:
 
     def __get_embedding_weight(
         self, pretrained_path: str, embedding_dim: int = 300
-    ) -> np.ndarray | None:
+    ):
         """Returns embedding weights.
 
         Function modified from http://ronny.rest/blog/post_2017_08_04_glove/
