@@ -72,7 +72,7 @@ class DataPreprocessor:
         self.ckpt_path_DAE: str = args.rep_learning_checkpoint
         self.ckpt_path_Autoencode: str = args.autoencoder_checkpoint
 
-        if args.name != "DAE":
+        if args.name != "Frame_Level":
             self.DAE_frame_level: Tuple[argparse.Namespace, torch.nn.Module, torch.nn.MSELoss, Vocab, int] = utils.train_utils.load_checkpoint_and_model(
                 self.ckpt_path_DAE, device,'DAE')
 
@@ -322,7 +322,7 @@ class DataPreprocessor:
                         self.n_out_samples += 1
                 else:
                     for words, poses, audio, aux in zip(sample_words_list, sample_skeletons_list,
-                                                        sample_audio_list, aux_info):
+                                                        sample_audio_list_raws, aux_info):
                         poses = np.asarray(poses)
 
                         # save
@@ -333,7 +333,7 @@ class DataPreprocessor:
                         self.n_out_samples += 1
 
     @staticmethod
-    def get_words_in_time_range(word_list: list[list], start_time: float, end_time: float) -> list[list]:
+    def get_words_in_time_range(word_list, start_time: float, end_time: float):
         """Retrieves words in the list that fall between the start_time and end_time provided.
 
         Args:
