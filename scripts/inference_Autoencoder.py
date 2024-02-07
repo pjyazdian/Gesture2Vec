@@ -50,18 +50,18 @@ from twh_dataset_to_lmdb import process_bvh_rot_only_Taras as process_bvh_rot_on
 from twh_dataset_to_lmdb import process_bvh_test1 as process_bvh_rot_test1
 from inference_DAE import feat2bvh, make_bvh_Trinity
 
-from basis_expansions import (
-    Binner,
-    GaussianKernel,
-    Polynomial,
-    LinearSpline,
-    CubicSpline,
-    NaturalCubicSpline,
-)
+# from basis_expansions import (
+#     Binner,
+#     GaussianKernel,
+#     Polynomial,
+#     LinearSpline,
+#     CubicSpline,
+#     NaturalCubicSpline,
+# )
 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-DATASET_TYPE = "TWH"  # or "Trinity"
+DATASET_TYPE = "Trinity" # "TWH"
 Flag_VQ = True
 
 
@@ -96,7 +96,7 @@ def generate_gestures(
     mean = np.array(args.data_mean).squeeze()
     std = np.array(args.data_std).squeeze()
     std = np.clip(std, a_min=0.01, a_max=None)
-    out_poses = (poses_mirror - mean) / std
+    out_poses = (poses - mean) / std
 
     target = torch.from_numpy(out_poses)
     # target = torch.unsqueeze(target,2)
@@ -369,9 +369,9 @@ def main(checkpoint_path_DAE: str, checkpoint_path_rnn: str) -> None:
     # inference
     for infer_i in range(1, 2):
         if DATASET_TYPE == "Trinity":
-            bvh_file = "/local-scratch/pjomeyaz/GENEA_DATASET/trinityspeechgesture.scss.tcd.ie/data/GENEA_Challenge_2020_data_release/Test_data/Motion/TestSeq0"
+            bvh_file = "../../data/Test_data/Motion/TestSeq"
             org_poses, reconstructed = generate_gestures(
-                args, DAE, rnn, bvh_file + str(infer_i).zfill(2) + ".bvh"
+                args, DAE, rnn, bvh_file + str(infer_i).zfill(3) + ".bvh"
             )
         elif DATASET_TYPE == "TWH":
             pre_bvh_pth = "/local-scratch/pjomeyaz/rosie_gesture_benchmark/cloned/Clustering/must/GENEA/Co-Speech_Gesture_Generation/dataset/dataset_v1/val/bvh/"
@@ -638,14 +638,6 @@ if __name__ == "__main__":
     """
     ../output/DAE/train_DAE_H41/rep_learning_DAE_H41_checkpoint_020.bin
     ../output/autoencoder/without_att_fxw_zinput/autoencode_fxw_zinput_checkpoint_100.bin
-
-
-    ../output/DAE/train_DAE_H41/rep_learning_DAE_H41_checkpoint_020.bin
-    ../output/autoencoder/VAE/Dautoencode_fxw_zinput_checkpoint_100.bin
-
-
-    ../output/DAE/train_DAE_H41/rep_learning_DAE_H41_checkpoint_020.bin
-    ../output/autoencoder/VAE+sim/autoencoder_decoder_trained_cont/autoencoder_decoder_trained_cont_checkpoint_040.bin
     """
 
     parser = argparse.ArgumentParser()

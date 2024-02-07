@@ -26,7 +26,7 @@ target_joints = ['Spine', 'Spine1', 'Spine2', 'Spine3', 'Neck', 'Neck1', 'Head',
 rep_learning = False
 
 DATASET_Type = 'Trinity'
-DATASET_Type = 'TWH'
+# DATASET_Type = 'TWH'
 
 def process_bvh(gesture_filename):
     p = BVHParser()
@@ -40,7 +40,7 @@ def process_bvh(gesture_filename):
         ('mir', Mirror(axis='X', append=True)),
         ('jtsel', JointSelector(target_joints, include_root=True)),
         ('cnst', ConstantsRemover()),
-        # ('np', Numpyfier())
+        ('np', Numpyfier())
     ])
 
     out_data = data_pipe.fit_transform(data_all)

@@ -163,7 +163,7 @@ def train_epochs(
     # init model
     generator, loss_fn = init_model(args, lang_model, pose_dim, device)
 
-    if args.hidden_size == -1:
+    if args.hidden_size == -1: # for the ablation study
         try:  # multi gpu
             gen_state_dict = generator.module.state_dict()
         except AttributeError:  # single gpu
@@ -449,8 +449,11 @@ def main(
     except:
         pass
 
-    return Global_loss_train["loss"][-1], Global_loss_eval[-1]
-
+    #
+    try:
+        return Global_loss_train["loss"][-1], Global_loss_eval[-1]
+    except:
+        return 0, 0
 
 def plot_loss(
     Global_loss_train: dict[str, list], Global_loss_eval: list, save_path: str
@@ -524,8 +527,8 @@ def plot_embedding(
 
     plt.figure(figsize=(16, 10))
     sns.scatterplot(
-        X_embedded[:, 0],
-        X_embedded[:, 1],
+        x=X_embedded[:, 0],
+        y=X_embedded[:, 1],
         legend=False,
     )
     plt.title("Embedding visualization" + str(epoch_num))

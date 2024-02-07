@@ -72,6 +72,8 @@ from utils.average_meter import AverageMeter
 from utils.vocab_utils import build_vocab
 from utils.data_utils import SubtitleWrapper, normalize_string
 
+
+
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 debug = False
 
@@ -479,15 +481,17 @@ def plot_embedding(
     MyTSNE = TSNE(
         n_components=2, perplexity=30, metric="euclidean", n_jobs=8, verbose=True
     )
-    X_embedded = MyTSNE.fit(normalized_data)
-
+    try:
+        X_embedded = MyTSNE.fit(normalized_data)
+    except:
+        print()
     plt.figure(figsize=(16, 10))
     # palette = sns.color_palette("bright", k_component)
     # 2D
 
     sns.scatterplot(
-        X_embedded[:, 0],
-        X_embedded[:, 1],
+        x=X_embedded[:, 0],
+        y=X_embedded[:, 1],
         # hue=labels_,
         legend=False,
     )

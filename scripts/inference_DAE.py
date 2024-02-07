@@ -42,6 +42,7 @@ from pymo.viz_tools import *
 from pymo.writers import *
 from tqdm import tqdm
 
+from utils.train_utils import load_checkpoint_and_model
 from trinity_data_to_lmdb import process_bvh as process_bvh_trinity
 from twh_dataset_to_lmdb import process_bvh_rot_only_Taras as process_bvh_rot_only_Taras
 from twh_dataset_to_lmdb import process_bvh_test1 as process_bvh_rot_test1
@@ -86,11 +87,11 @@ def generate_gestures(
         poses, poses_mirror = process_bvh_trinity(bvh_file)
     elif DATASET_Type == "TWH":
         poses = process_bvh_rot_test1(bvh_file)
-        poses_mirror = poses[250:600]
+        poses = poses[250:600]
     mean = np.array(args.data_mean).squeeze()
     std = np.array(args.data_std).squeeze()
     std = np.clip(std, a_min=0.01, a_max=None)
-    out_poses = (poses_mirror - mean) / std
+    out_poses = (poses - mean) / std
 
     target = torch.from_numpy(out_poses)
     target = torch.unsqueeze(target, 2)
@@ -181,7 +182,7 @@ def k_components_analysis_VQ(base_folder: str, mink: int, maxk: int) -> None:
             out_dim,
         ) = utils.train_utils.load_checkpoint_and_model(checkpoint_path, device, "DAE")
 
-        bvh_file = "/local-scratch/pjomeyaz/GENEA_DATASET/trinityspeechgesture.scss.tcd.ie/data/GENEA_Challenge_2020_data_release/Test_data/Motion/TestSeq001.bvh"
+        bvh_file = "../../data/Test_data/Motion/TestSeq001.bvh"
         org_poses, reconstructed, latent, encodings = generate_gestures(
             args, generator, bvh_file
         )
@@ -418,7 +419,7 @@ def main(checkpoint_path: str):
         loss_fn,
         lang_model,
         out_dim,
-    ) = utils.train_utils.load_checkpoint_and_model(checkpoint_path, device, "DAE")
+    ) = load_checkpoint_and_model(checkpoint_path, device, "DAE")
     pprint.pprint(vars(args))
     save_path = os.path.dirname(checkpoint_path)
     os.makedirs(save_path, exist_ok=True)
@@ -434,7 +435,7 @@ def main(checkpoint_path: str):
     # inference
     # 1. Trinity Dataset
     if DATASET_Type == "Trinity":
-        bvh_file = "/local-scratch/pjomeyaz/GENEA_DATASET/trinityspeechgesture.scss.tcd.ie/data/GENEA_Challenge_2020_data_release/Test_data/Motion/TestSeq001.bvh"
+        bvh_file = "../../data/Test_data/Motion/TestSeq001.bvh"
     # 2. Talking With Hands 16.2M
     elif DATASET_Type == "TWH":
         bvh_file = "/local-scratch/pjomeyaz/rosie_gesture_benchmark/cloned/Clustering/must/GENEA/Co-Speech_Gesture_Generation/dataset/dataset_v1/val/bvh/val_2022_v1_012.bvh"
@@ -503,7 +504,7 @@ def make_bvh_Trinity(save_path: str, filename_prefix: str, poses: np.ndarray) ->
     n_poses = poses.shape[0]
     out_poses = np.zeros((n_poses, poses.shape[1]))
 
-    if n_poses > 15:
+    if n_poses > 15 and False:
         for i in range(poses.shape[1]):
             out_poses[:, i] = savgol_filter(
                 poses[:, i], 15, 2
@@ -519,7 +520,7 @@ def make_bvh_Trinity(save_path: str, filename_prefix: str, poses: np.ndarray) ->
     out_euler = np.zeros((out_poses.shape[0], out_poses.shape[1] * 3))
     for i in range(out_poses.shape[0]):  # frames
         r = R.from_matrix(out_poses[i])
-        out_euler[i] = r.as_euler("ZXY", degrees=True).flatten()
+        out_euler[i] = r.as_euler('ZXY', degrees=True).flatten()
 
     bvh_data = pipeline.inverse_transform([out_euler])
 
@@ -612,6 +613,25 @@ if __name__ == "__main__":
     # k_components_analysis_VQ('../output/DAE_New/VQs', 5, 200)
 
     main(args.ckpt_path)
+
+    # Double-check: process_bvh & make_bvh pipeline
+    # 1. Load
+    # bvh_file = "../../data/Test_data/Motion/TestSeq001.bvh"
+    # loaded = process_bvh_trinity(bvh_file)
+    #
+    # # Normalize
+    # mean = np.array(args.data_mean).squeeze()
+    # std = np.array(args.data_std).squeeze()
+    # std = np.clip(std, a_min=0.01, a_max=None)
+    # normalized_poses = (np.copy(loaded) - mean) / std
+    #
+    # # Un-Normalize
+    #
+    # un_normalized_poses = np.multiply(normalized_poses, std) + mean
+    #
+    # # 2. Write
+    # make_bvh_Trinity('output', 'pip_test_inference_py', loaded[0])
+    # print('Finished!')
 
 
 def scatter_plot(latent_representations: np.ndarray, labels: list) -> None:
