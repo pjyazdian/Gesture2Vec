@@ -33,7 +33,7 @@ def build_vocab(
     dataset_list: list,
     cache_path: str,
     word_vec_path: str = None,
-    feat_dim: int | None = None,
+    feat_dim = None,
 ) -> Vocab:
     """Build a language vector representation model from an existing source.
 

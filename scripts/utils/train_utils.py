@@ -114,10 +114,8 @@ def save_checkpoint(state: dict, filename: str) -> None:
 
 
 def load_checkpoint_and_model(
-    checkpoint_path: str, _device: str | torch.device = "cpu", what: str = ""
-) -> Tuple[
-    argparse.Namespace, torch.nn.Module, torch.nn.modules.loss._Loss, Vocab, int
-]:
+    checkpoint_path, _device = "cpu", what: str = ""
+):
     """Load a checkpoint file representing a saved state of a model into memory.
 
     Args:
